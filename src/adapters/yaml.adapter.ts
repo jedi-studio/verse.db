@@ -9,10 +9,11 @@ import {
   AdapterUniqueKey,
   versedbAdapter,
   CollectionFilter,
-SearchResult,
+  SearchResult,
+  operationKeys,
 } from "../types/adapter";
 import { DevLogsOptions, AdapterSetting } from "../types/adapter";
-import yaml from "yaml"
+import yaml from "yaml";
 
 export class yamlAdapter extends EventEmitter implements versedbAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
@@ -245,7 +246,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
   ): Promise<AdapterResults> {
     try {
       const currentData: any[] = await this.load(dataname);
-  
+
       if (!displayOptions || Object.keys(displayOptions).length === 0) {
         return {
           acknowledged: false,
@@ -253,9 +254,9 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           errorMessage: "You need to provide at least one option argument.",
         };
       }
-  
+
       let filteredData = currentData;
-  
+
       if (displayOptions.filters) {
         filteredData = currentData.filter((item: any) => {
           for (const key of Object.keys(displayOptions.filters)) {
@@ -266,7 +267,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           return true;
         });
       }
-  
+
       if (displayOptions.sortBy && displayOptions.sortBy !== "any") {
         filteredData.sort((a: any, b: any) => {
           if (displayOptions.sortOrder === "asc") {
@@ -278,20 +279,23 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       } else {
         filteredData.sort((a: any, b: any) => a - b);
       }
-  
+
       const startIndex = (displayOptions.page - 1) * displayOptions.pageSize;
       const endIndex = Math.min(
         startIndex + displayOptions.pageSize,
         filteredData.length
       );
       filteredData = filteredData.slice(startIndex, endIndex);
-  
-      if (displayOptions.displayment !== null && displayOptions.displayment > 0) {
+
+      if (
+        displayOptions.displayment !== null &&
+        displayOptions.displayment > 0
+      ) {
         filteredData = filteredData.slice(0, displayOptions.displayment);
       }
-  
+
       this.emit("allData", filteredData);
-  
+
       return {
         acknowledged: true,
         message: "Data found with the given options.",
@@ -299,7 +303,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       };
     } catch (e: any) {
       this.emit("error", e.message);
-  
+
       return {
         acknowledged: false,
         errorMessage: `${e.message}`,
@@ -307,7 +311,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       };
     }
   }
-  
+
   async remove(
     dataname: string,
     query: any,
@@ -387,9 +391,9 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
   async update(
     dataname: string,
     searchQuery: any,
-    newData: any,
+    newData: operationKeys,
     upsert: boolean = false
-  ): Promise<AdapterResults> {
+  ) {
     try {
       if (!searchQuery) {
         return {
@@ -413,7 +417,8 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       let updatedDocument: any = null;
       let matchFound = false;
 
-      currentData.forEach((item: any) => {
+      for (let index of currentData.keys()) {
+        const item: any = currentData[index];
         let match = true;
 
         for (const key of Object.keys(searchQuery)) {
@@ -424,12 +429,56 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
         }
 
         if (match) {
-          Object.assign(item, newData);
-          updatedDocument = item;
-          updatedCount++;
-          matchFound = true;
+          // Process special $ operations
+          if (newData.$inc) {
+            for (const field in newData.$inc) {
+              item[field] = (item[field] || 0) + newData.$inc[field];
+            }
+          }
+          if (newData.$set) {
+            for (const field in newData.$set) {
+              item[field] = newData.$set[field];
+            }
+          }
+          if (newData.$push) {
+            for (const field in newData.$push) {
+              if (!item[field]) item[field] = [];
+              item[field].push(newData.$push[field]);
+            }
+          }
+          if (newData.$min) {
+            for (const field in newData.$min) {
+              item[field] = Math.min(item[field] || 0, newData.$min[field]);
+            }
+          }
+          if (newData.$max) {
+            for (const field in newData.$max) {
+              item[field] = Math.max(item[field] || 0, newData.$max[field]);
+            }
+          }
+          if (newData.$currentDate) {
+            for (const field in newData.$currentDate) {
+              if (
+                typeof newData.$currentDate[field] === "boolean" &&
+                newData.$currentDate[field]
+              ) {
+                item[field] = new Date().toISOString();
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "date"
+              ) {
+                item[field] = new Date().toISOString().slice(0, 10);
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "timestamp"
+              ) {
+                item[field] = new Date().toISOString();
+              }
+            }
+          }
+          break;
         }
-      });
+      }
 
       if (!matchFound && upsert) {
         currentData.push(newData);
@@ -509,46 +558,119 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
-  async search(dataPath: string, collectionFilters: CollectionFilter[]): Promise<AdapterResults> {
+  async search(
+    dataPath: string,
+    collectionFilters: CollectionFilter[]
+  ): Promise<AdapterResults> {
     const results: SearchResult = {};
     for (const filter of collectionFilters) {
-        const { dataName, displayment, filter: query } = filter;
-        const filePath = path.join(dataPath, `${dataName}.yaml`);
-        
-        try {
-            const data = await fs.promises.readFile(filePath, "utf-8");
-            const yamlData = yaml.parse(data);
+      const { dataName, displayment, filter: query } = filter;
+      const filePath = path.join(dataPath, `${dataName}.yaml`);
 
-            let result = yamlData;
+      try {
+        const data = await fs.promises.readFile(filePath, "utf-8");
+        const yamlData = yaml.parse(data);
 
-            if (Object.keys(query).length !== 0) {
-                result = yamlData.filter((item: any) => {
-                    for (const key in query) {
-                        if (item[key] !== query[key]) {
-                            return false;
-                        }
-                    }
-                    return true;
-                });
+        let result = yamlData;
+
+        if (Object.keys(query).length !== 0) {
+          result = yamlData.filter((item: any) => {
+            for (const key in query) {
+              if (item[key] !== query[key]) {
+                return false;
+              }
             }
-
-            if (displayment !== null) {
-                result = result.slice(0, displayment);
-            }
-
-         results[dataName] = result;
-        } catch (error) {
-        logError({
-            content: "Search operation is not supported by the current adapter.",
-            devLogs: this.devLogs,
-            throwErr: true,
-        });
+            return true;
+          });
         }
+
+        if (displayment !== null) {
+          result = result.slice(0, displayment);
+        }
+
+        results[dataName] = result;
+      } catch (error) {
+        logError({
+          content: "Search operation is not supported by the current adapter.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+      }
     }
 
     return results;
   }
 
+  private applyUpdateToJsonObject(
+    newData: operationKeys,
+    columns: string[],
+    jsonObject: Record<string, any>
+  ) {
+    if (newData.$inc) {
+      for (const field in newData.$inc) {
+        if (columns.includes(field)) {
+          jsonObject[field] = (jsonObject[field] || 0) + newData.$inc[field];
+        }
+      }
+    }
+    if (newData.$set) {
+      for (const field in newData.$set) {
+        if (columns.includes(field)) {
+          jsonObject[field] = newData.$set[field];
+        }
+      }
+    }
+    if (newData.$push) {
+      for (const field in newData.$push) {
+        if (columns.includes(field)) {
+          if (!jsonObject[field]) {
+            jsonObject[field] = [];
+          }
+          jsonObject[field].push(newData.$push[field]);
+        }
+      }
+    }
+    if (newData.$min) {
+      for (const field in newData.$min) {
+        if (columns.includes(field)) {
+          jsonObject[field] = Math.min(
+            jsonObject[field] || 0,
+            newData.$min[field]
+          );
+        }
+      }
+    }
+    if (newData.$max) {
+      for (const field in newData.$max) {
+        if (columns.includes(field)) {
+          jsonObject[field] = Math.max(
+            jsonObject[field] || 0,
+            newData.$max[field]
+          );
+        }
+      }
+    }
+    if (newData.$currentDate) {
+      for (const field in newData.$currentDate) {
+        if (
+          typeof newData.$currentDate[field] === "boolean" &&
+          newData.$currentDate[field]
+        ) {
+          jsonObject[field] = new Date().toISOString();
+        } else if (
+          newData.$currentDate[field] &&
+          (newData.$currentDate[field] as any).$type === "date"
+        ) {
+          jsonObject[field] = new Date().toISOString().slice(0, 10);
+        } else if (
+          newData.$currentDate[field] &&
+          (newData.$currentDate[field] as any).$type === "timestamp"
+        ) {
+          jsonObject[field] = new Date().toISOString();
+        }
+      }
+    }
+  }
 
   public initFile({ dataname }: { dataname: string }): void {
     const emptyData: any[] = [];

@@ -10,6 +10,7 @@ import {
   versedbAdapter,
   CollectionFilter,
   SearchResult,
+  operationKeys,
 } from "../types/adapter";
 import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 
@@ -389,9 +390,9 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
   async update(
     dataname: string,
     searchQuery: any,
-    newData: any,
+    newData: operationKeys,
     upsert: boolean = false
-  ): Promise<AdapterResults> {
+  ) {
     try {
       if (!searchQuery) {
         return {
@@ -415,7 +416,8 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       let updatedDocument: any = null;
       let matchFound = false;
 
-      currentData.forEach((item: any) => {
+      for (let index of currentData.keys()) {
+        const item: any = currentData[index];
         let match = true;
 
         for (const key of Object.keys(searchQuery)) {
@@ -426,12 +428,56 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         }
 
         if (match) {
-          Object.assign(item, newData);
-          updatedDocument = item;
-          updatedCount++;
-          matchFound = true;
+          // Process special $ operations
+          if (newData.$inc) {
+            for (const field in newData.$inc) {
+              item[field] = (item[field] || 0) + newData.$inc[field];
+            }
+          }
+          if (newData.$set) {
+            for (const field in newData.$set) {
+              item[field] = newData.$set[field];
+            }
+          }
+          if (newData.$push) {
+            for (const field in newData.$push) {
+              if (!item[field]) item[field] = [];
+              item[field].push(newData.$push[field]);
+            }
+          }
+          if (newData.$min) {
+            for (const field in newData.$min) {
+              item[field] = Math.min(item[field] || 0, newData.$min[field]);
+            }
+          }
+          if (newData.$max) {
+            for (const field in newData.$max) {
+              item[field] = Math.max(item[field] || 0, newData.$max[field]);
+            }
+          }
+          if (newData.$currentDate) {
+            for (const field in newData.$currentDate) {
+              if (
+                typeof newData.$currentDate[field] === "boolean" &&
+                newData.$currentDate[field]
+              ) {
+                item[field] = new Date().toISOString();
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "date"
+              ) {
+                item[field] = new Date().toISOString().slice(0, 10);
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "timestamp"
+              ) {
+                item[field] = new Date().toISOString();
+              }
+            }
+          }
+          break;
         }
-      });
+      }
 
       if (!matchFound && upsert) {
         currentData.push(newData);
@@ -561,6 +607,78 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       };
     }
   }
+
+  private applyUpdateToJsonObject(
+    newData: operationKeys,
+    columns: string[],
+    jsonObject: Record<string, any>
+  ) {
+    if (newData.$inc) {
+      for (const field in newData.$inc) {
+        if (columns.includes(field)) {
+          jsonObject[field] = (jsonObject[field] || 0) + newData.$inc[field];
+        }
+      }
+    }
+    if (newData.$set) {
+      for (const field in newData.$set) {
+        if (columns.includes(field)) {
+          jsonObject[field] = newData.$set[field];
+        }
+      }
+    }
+    if (newData.$push) {
+      for (const field in newData.$push) {
+        if (columns.includes(field)) {
+          if (!jsonObject[field]) {
+            jsonObject[field] = [];
+          }
+          jsonObject[field].push(newData.$push[field]);
+        }
+      }
+    }
+    if (newData.$min) {
+      for (const field in newData.$min) {
+        if (columns.includes(field)) {
+          jsonObject[field] = Math.min(
+            jsonObject[field] || 0,
+            newData.$min[field]
+          );
+        }
+      }
+    }
+    if (newData.$max) {
+      for (const field in newData.$max) {
+        if (columns.includes(field)) {
+          jsonObject[field] = Math.max(
+            jsonObject[field] || 0,
+            newData.$max[field]
+          );
+        }
+      }
+    }
+    if (newData.$currentDate) {
+      for (const field in newData.$currentDate) {
+        if (
+          typeof newData.$currentDate[field] === "boolean" &&
+          newData.$currentDate[field]
+        ) {
+          jsonObject[field] = new Date().toISOString();
+        } else if (
+          newData.$currentDate[field] &&
+          (newData.$currentDate[field] as any).$type === "date"
+        ) {
+          jsonObject[field] = new Date().toISOString().slice(0, 10);
+        } else if (
+          newData.$currentDate[field] &&
+          (newData.$currentDate[field] as any).$type === "timestamp"
+        ) {
+          jsonObject[field] = new Date().toISOString();
+        }
+      }
+    }
+  }
+
   public initFile({ dataname }: { dataname: string }): void {
     const emptyData: any[] = [];
     const directory = path.dirname(dataname);
