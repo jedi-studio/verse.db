@@ -1,0 +1,12 @@
+.git
+.git/
+.github
+.github/
+content/
+node_modules
+package-lock.json
+.vscode
+tests
+tests/
+src
+tsconfig.json
