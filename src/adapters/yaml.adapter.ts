@@ -390,12 +390,12 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
 
   async update(
     dataname: string,
-    searchQuery: any,
+    queries: any,
     newData: operationKeys,
     upsert: boolean = false
   ) {
     try {
-      if (!searchQuery) {
+      if (!queries) {
         return {
           acknowledged: false,
           errorMessage: `Search query is not provided`,
@@ -421,8 +421,8 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
         const item: any = currentData[index];
         let match = true;
 
-        for (const key of Object.keys(searchQuery)) {
-          if (item[key] !== searchQuery[key]) {
+        for (const key of Object.keys(queries)) {
+          if (item[key] !== queries[key]) {
             match = false;
             break;
           }
@@ -564,8 +564,8 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
   ): Promise<AdapterResults> {
     const results: SearchResult = {};
     for (const filter of collectionFilters) {
-      const { dataName, displayment, filter: query } = filter;
-      const filePath = path.join(dataPath, `${dataName}.yaml`);
+      const { dataname, displayment, filter: query } = filter;
+      const filePath = path.join(dataPath, `${dataname}.yaml`);
 
       try {
         const data = await fs.promises.readFile(filePath, "utf-8");
@@ -588,7 +588,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           result = result.slice(0, displayment);
         }
 
-        results[dataName] = result;
+        results[dataname] = result;
       } catch (error) {
         logError({
           content: "Search operation is not supported by the current adapter.",

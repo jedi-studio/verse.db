@@ -37,24 +37,24 @@ export interface versedbAdapter {
   find(dataname: string, query: any): Promise<AdapterResults>;
   dataAll(dataname: string, displayOptions: DisplayOptions): Promise<AdapterResults>;
   remove(dataname: string, query: any, options?: any): Promise<AdapterResults>;
-  update(dataname: string, searchQuery: any, newData: any, upsert: boolean): Promise<AdapterResults>;
+  update(dataname: string, queries: any, newData: any, upsert: boolean): Promise<AdapterResults>;
   drop(dataname: string): Promise<AdapterResults>;
 }
 
 export interface SQLAdapter {
   load(dataname: string): Promise<AdapterResults>;
-  createTable(dataName: string, tableName: string, tableDefinition?: string): Promise<AdapterResults>;
-  insertData(dataName: string, tableName: string, data: any[]): Promise<AdapterResults>;
-  find(dataName: string, tableName: string, condition?: string): Promise<AdapterResults>;
-  removeData(dataName: string, tableName: string, dataToRemove: any[]): Promise<AdapterResults>;
-  update(dataName: string, tableName: string, query: string, newData: any, upsert: boolean): Promise<AdapterResults>;
-  allData(dataName: string, displayOption: DisplayOptions): Promise<AdapterResults>;
-  updateMany(dataName: string, tableName: string, queries: any[], newData: operationKeys): Promise<AdapterResults>;
-  drop(dataName: string, tableName?: string): Promise<AdapterResults>
-  countDoc(dataName: string, tableName: string): Promise<AdapterResults>;
-  dataSize(dataName: string): Promise<AdapterResults>;
+  createTable(dataname: string, tableName: string, tableDefinition?: string): Promise<AdapterResults>;
+  insertData(dataname: string, tableName: string, data: any[]): Promise<AdapterResults>;
+  find(dataname: string, tableName: string, condition?: string): Promise<AdapterResults>;
+  removeData(dataname: string, tableName: string, dataToRemove: any[]): Promise<AdapterResults>;
+  update(dataname: string, tableName: string, query: string, newData: any, upsert: boolean): Promise<AdapterResults>;
+  allData(dataname: string, displayOption: DisplayOptions): Promise<AdapterResults>;
+  updateMany(dataname: string, tableName: string, queries: any[], newData: operationKeys): Promise<AdapterResults>;
+  drop(dataname: string, tableName?: string): Promise<AdapterResults>
+  countDoc(dataname: string, tableName: string): Promise<AdapterResults>;
+  dataSize(dataname: string): Promise<AdapterResults>;
   migrateTable({ from, to, table }: MigrationParams): Promise<AdapterResults>;
-  removeKey(dataName: string, tableName: string, keyToRemove: string, valueToRemove: string): Promise<AdapterResults>;
+  removeKey(dataname: string, tableName: string, keyToRemove: string, valueToRemove: string): Promise<AdapterResults>;
   toJSON(from: string): Promise<AdapterResults>;
 }
 
@@ -69,7 +69,7 @@ export interface AdapterSetting {
 }
 
 export interface CollectionFilter {
-  dataName: string;
+  dataname: string;
   displayment: number | null;
   filter?: any;
 }

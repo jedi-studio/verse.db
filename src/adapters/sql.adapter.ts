@@ -26,8 +26,8 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
   }
 
-  async load(dataName: string): Promise<AdapterResults> {
-    const filePath = path.resolve(dataName);
+  async load(dataname: string): Promise<AdapterResults> {
+    const filePath = path.resolve(dataname);
 
     try {
       let fileContent: string = "";
@@ -40,7 +40,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         await fs.promises.writeFile(filePath, "", "utf-8");
         return {
           acknowledged: true,
-          message: `Created new SQL file '${dataName}'`,
+          message: `Created new SQL file '${dataname}'`,
           results: null,
         };
       }
@@ -56,14 +56,14 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           await fs.promises.writeFile(filePath, "", "utf-8");
           return {
             acknowledged: true,
-            message: `Created new SQL file '${dataName}'`,
+            message: `Created new SQL file '${dataname}'`,
             results: null,
           };
         } catch (er: any) {
           return {
             acknowledged: false,
             results: null,
-            errorMessage: `Failed to create file '${dataName}': ${er.message}`,
+            errorMessage: `Failed to create file '${dataname}': ${er.message}`,
           };
         }
       } else {
@@ -77,13 +77,13 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async createTable(
-    dataName: string,
+    dataname: string,
     tableName: string,
     tableDefinition: string
   ): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -117,13 +117,13 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async insertData(
-    dataName: string,
+    dataname: string,
     tableName: string,
     data: any[]
   ): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -163,13 +163,13 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async find(
-    dataName: string,
+    dataname: string,
     tableName: string,
     condition?: string
   ): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -204,13 +204,13 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async removeData(
-    dataName: string,
+    dataname: string,
     tableName: string,
     dataToRemove: any[]
   ): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -293,14 +293,14 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async removeKey(
-    dataName: string,
+    dataname: string,
     tableName: string,
     keyToRemove: string
   ): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+    const filePath = `${dataname}`;
 
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -355,12 +355,12 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async update(
-    dataName: string,
+    dataname: string,
     tableName: string,
     query: any,
     newData: operationKeys
   ): Promise<AdapterResults> {
-    let data: string = fs.readFileSync(dataName, "utf8");
+    let data: string = fs.readFileSync(dataname, "utf8");
     let lines: string[] = data.split("\n");
 
     let tableIndex: number = -1;
@@ -374,7 +374,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     if (tableIndex === -1) {
       return {
         acknowledged: false,
-        errorMessage: `Table '${tableName}' not found in '${dataName}'.`,
+        errorMessage: `Table '${tableName}' not found in '${dataname}'.`,
         results: null,
       };
     }
@@ -492,7 +492,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       }
     }
 
-    fs.writeFileSync(dataName, lines.join("\n"));
+    fs.writeFileSync(dataname, lines.join("\n"));
 
     return {
       acknowledged: true,
@@ -502,12 +502,12 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async allData(
-    dataName: string,
+    dataname: string,
     displayOption: DisplayOptions
   ): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -540,13 +540,13 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async updateMany(
-    dataName: string,
+    dataname: string,
     tableName: string,
     queries: any[],
     newData: operationKeys
   ): Promise<AdapterResults> {
     try {
-      let data: string = fs.readFileSync(dataName, "utf8");
+      let data: string = fs.readFileSync(dataname, "utf8");
       let lines: string[] = data.split("\n");
 
       const tableIndex = this.findTableIndex(lines, tableName);
@@ -554,7 +554,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       if (tableIndex === -1) {
         return {
           acknowledged: false,
-          errorMessage: `Table '${tableName}' not found in '${dataName}'.`,
+          errorMessage: `Table '${tableName}' not found in '${dataname}'.`,
           results: null,
         };
       }
@@ -586,7 +586,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         }
       }
 
-      fs.writeFileSync(dataName, lines.join("\n"));
+      fs.writeFileSync(dataname, lines.join("\n"));
 
       return {
         acknowledged: true,
@@ -602,10 +602,10 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
   }
 
-  async drop(dataName: string, tableName?: string): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+  async drop(dataname: string, tableName?: string): Promise<AdapterResults> {
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -651,10 +651,10 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
   }
 
-  async countDoc(dataName: string, tableName: string): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+  async countDoc(dataname: string, tableName: string): Promise<AdapterResults> {
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -687,10 +687,10 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
   }
 
-  async countTable(dataName: string): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+  async countTable(dataname: string): Promise<AdapterResults> {
+    const filePath = `${dataname}`;
     try {
-      const fileContentResult = await this.load(dataName);
+      const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
         return {
           acknowledged: false,
@@ -714,8 +714,8 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
   }
 
-  async dataSize(dataName: string): Promise<AdapterResults> {
-    const filePath = `${dataName}`;
+  async dataSize(dataname: string): Promise<AdapterResults> {
+    const filePath = `${dataname}`;
     try {
       const stats = await fs.promises.stat(filePath);
       const fileSizeInBytes = stats.size;

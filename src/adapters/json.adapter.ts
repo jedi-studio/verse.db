@@ -389,12 +389,12 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
 
   async update(
     dataname: string,
-    searchQuery: any,
+    queries: any,
     newData: operationKeys,
     upsert: boolean = false
   ) {
     try {
-      if (!searchQuery) {
+      if (!queries) {
         return {
           acknowledged: false,
           errorMessage: `Search query is not provided`,
@@ -420,8 +420,139 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         const item: any = currentData[index];
         let match = true;
 
-        for (const key of Object.keys(searchQuery)) {
-          if (item[key] !== searchQuery[key]) {
+        for (const key of Object.keys(queries)) {
+          if (item[key] !== queries[key]) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          // Process special $ operations
+          if (newData.$inc) {
+            for (const field in newData.$inc) {
+              item[field] = (item[field] || 0) + newData.$inc[field];
+            }
+          }
+          if (newData.$set) {
+            for (const field in newData.$set) {
+              item[field] = newData.$set[field];
+            }
+          }
+          if (newData.$push) {
+            for (const field in newData.$push) {
+              if (!item[field]) item[field] = [];
+              item[field].push(newData.$push[field]);
+            }
+          }
+          if (newData.$min) {
+            for (const field in newData.$min) {
+              item[field] = Math.min(item[field] || 0, newData.$min[field]);
+            }
+          }
+          if (newData.$max) {
+            for (const field in newData.$max) {
+              item[field] = Math.max(item[field] || 0, newData.$max[field]);
+            }
+          }
+          if (newData.$currentDate) {
+            for (const field in newData.$currentDate) {
+              if (
+                typeof newData.$currentDate[field] === "boolean" &&
+                newData.$currentDate[field]
+              ) {
+                item[field] = new Date().toISOString();
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "date"
+              ) {
+                item[field] = new Date().toISOString().slice(0, 10);
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "timestamp"
+              ) {
+                item[field] = new Date().toISOString();
+              }
+            }
+          }
+          break;
+        }
+      }
+
+      if (!matchFound && upsert) {
+        currentData.push(newData);
+        updatedDocument = newData;
+        updatedCount++;
+      }
+
+      if (!matchFound && !upsert) {
+        return {
+          acknowledged: true,
+          errorMessage: `No document found matching the search query.`,
+          results: null,
+        };
+      }
+
+      fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
+
+      logSuccess({
+        content: "Data has been updated",
+        devLogs: this.devLogs,
+      });
+
+      this.emit("dataUpdated", updatedDocument);
+
+      return {
+        acknowledged: true,
+        message: `${updatedCount} document(s) updated successfully.`,
+        results: updatedDocument,
+      };
+    } catch (e: any) {
+      this.emit("error", e.message);
+
+      return {
+        acknowledged: false,
+        errorMessage: `${e.message}`,
+        results: null,
+      };
+    }
+  }
+
+  async updateMany(
+    dataname: string,
+    queries: any[any],
+    newData: operationKeys,
+    upsert: boolean = false
+  ) {
+    try {
+      if (!queries) {
+        return {
+          acknowledged: false,
+          errorMessage: `Search query is not provided`,
+          results: null,
+        };
+      }
+
+      if (!newData) {
+        return {
+          acknowledged: false,
+          errorMessage: `New data is not provided`,
+          results: null,
+        };
+      }
+
+      const currentData: any[] = await this.load(dataname);
+
+      let updatedCount = 0;
+      let updatedDocument: any = null;
+      let matchFound = false;
+
+      for (let index of currentData.keys()) {
+        const item: any = currentData[index];
+        let match = true;
+
+        for (const key of Object.keys(queries)) {
+          if (item[key] !== queries[key]) {
             match = false;
             break;
           }
@@ -561,8 +692,8 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
     try {
       const results: SearchResult = {};
       for (const filter of collectionFilters) {
-        const { dataName, displayment, filter: query } = filter;
-        const filePath = path.join(dataPath, `${dataName}.json`);
+        const { dataname, displayment, filter: query } = filter;
+        const filePath = path.join(dataPath, `${dataname}.json`);
 
         const data = await fs.promises.readFile(filePath, "utf-8");
         const jsonData = JSON.parse(data);
@@ -584,7 +715,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
           result = result.slice(0, displayment);
         }
 
-        results[dataName] = result;
+        results[dataname] = result;
       }
 
       return {
