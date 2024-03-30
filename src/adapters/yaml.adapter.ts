@@ -39,7 +39,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       } catch (error: any) {
         if (error.code === "ENOENT") {
           logInfo({
-            content: "Data or file path to yaml is not found.",
+            content: "Data or file path to YAML is not found.",
             devLogs: this.devLogs,
           });
 
@@ -821,7 +821,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
 
     fs.writeFileSync(dataname, yaml.stringify(emptyData), "utf8");
     logInfo({
-      content: `Empty yaml file created at ${dataname}`,
+      content: `Empty YAML file created at ${dataname}`,
       devLogs: this.devLogs,
     });
   }
