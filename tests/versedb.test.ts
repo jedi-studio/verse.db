@@ -1,36 +1,22 @@
-import jsonverse from "../src/index";
+import { after } from "node:test";
+import versedb from "../src/index";
 import { promises as fs } from "fs";
 
-async function jsonSetup(): Promise<any> {
+async function Setup(adapter: string): Promise<any> {
   const adapterOptions = {
-    adapter: "json",
-    dataPath: "./tests/json/data",
-    devLogs: { enable: true, path: "./tests/json/logs" },
+    adapter: `${adapter}`,
+    dataPath: `./tests/${adapter}/data`,
+    devLogs: { enable: true, path: `./tests/${adapter}/logs` },
     encryption: { enable: false, secret: "" },
     backup: { enable: false, path: "", retention: 0 },
   };
 
-  const db = new jsonverse.connect(adapterOptions);
-  return db;
-}
-async function yamlSetup(): Promise<any> {
-  const adapterOptions = {
-    adapter: "yaml",
-    dataPath: "./tests/yaml/data",
-    devLogs: { enable: true, path: "./tests/yaml/logs" },
-    encryption: { enable: false, secret: "" },
-    backup: { enable: false, path: "", retention: 0 },
-  };
-
-  const db = new jsonverse.connect(adapterOptions);
+  const db = new versedb.connect(adapterOptions);
   return db;
 }
 
-async function jsonTeardown(db: any) {
-  await fs.rm("./tests/json", { recursive: true, force: true });
-}
-async function yamlTeardown(db: any) {
-  await fs.rm("./tests/yaml", { recursive: true, force: true });
+async function Teardown(db: string) {
+  await fs.rm(`./test/${db}`, { recursive: true, force: true });
 }
 
 describe("JSON adapter testing all the methods", () => {
@@ -38,18 +24,18 @@ describe("JSON adapter testing all the methods", () => {
   console.log = function () {};
 
   beforeEach(async () => {
-    await jsonSetup();
-    db = await jsonSetup();
+    await Setup("json");
+    db = await Setup("json");
   });
 
   afterEach(async () => {
-    await jsonTeardown(db);
+    await Teardown("json");
   });
 
   // Test 1: Adding new data
   test("setup the database", async () => {
-    await yamlSetup();
-    db = await yamlSetup();
+    await Setup("json");
+    db = await Setup("json");
   });
 
   // Test 2: Adding new data
@@ -60,6 +46,10 @@ describe("JSON adapter testing all the methods", () => {
     };
 
     await db.add("add/add", newData);
+
+    after(async () => {
+      await Teardown("json");
+    });
 
     const data = await db.load("add/add");
     expect(data).toEqual([newData]);
@@ -381,18 +371,18 @@ describe("YAML adapter testing all the methods", () => {
   console.log = function () {};
 
   beforeEach(async () => {
-    await yamlSetup();
-    db = await yamlSetup();
+    await Setup("yaml");
+    db = await Setup("yaml");
   });
 
   afterEach(async () => {
-    await yamlTeardown(db);
+    await Teardown("yaml");
   });
 
   // Test 1: Adding new data
   test("setup the database", async () => {
-    await yamlSetup();
-    db = await yamlSetup();
+    await Setup("yaml");
+    db = await Setup("yaml");
   });
 
   // Test 2: Adding new data

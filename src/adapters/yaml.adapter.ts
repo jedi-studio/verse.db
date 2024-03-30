@@ -12,8 +12,8 @@ import {
   SearchResult,
   operationKeys,
 } from "../types/adapter";
-import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 import yaml from "yaml";
+import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 
 export class yamlAdapter extends EventEmitter implements versedbAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
@@ -39,7 +39,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       } catch (error: any) {
         if (error.code === "ENOENT") {
           logInfo({
-            content: "Data or file path to YAML is not found.",
+            content: "Data or file path to yaml is not found.",
             devLogs: this.devLogs,
           });
 
@@ -240,7 +240,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
-  async dataAll(
+  async loadAll(
     dataname: string,
     displayOptions: any
   ): Promise<AdapterResults> {
@@ -519,6 +519,138 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
+  async updateMany(
+    dataname: any,
+    queries: any[any],
+    newData: operationKeys,
+    upsert: boolean = false
+  ) {
+    try {
+      if (!queries) {
+        return {
+          acknowledged: false,
+          errorMessage: `Search query is not provided`,
+          results: null,
+        };
+      }
+
+      if (!newData) {
+        return {
+          acknowledged: false,
+          errorMessage: `New data is not provided`,
+          results: null,
+        };
+      }
+
+      const currentData: any[] = await this.load(dataname);
+
+      let updatedCount = 0;
+      let updatedDocument: any = null;
+      let matchFound = false;
+
+      for (let index of currentData.keys()) {
+        const item: any = currentData[index];
+        let match = true;
+
+        for (const key of Object.keys(queries)) {
+          if (item[key] !== queries[key]) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          // Process special $ operations
+          if (newData.$inc) {
+            for (const field in newData.$inc) {
+              item[field] = (item[field] || 0) + newData.$inc[field];
+            }
+          }
+          if (newData.$set) {
+            for (const field in newData.$set) {
+              item[field] = newData.$set[field];
+            }
+          }
+          if (newData.$push) {
+            for (const field in newData.$push) {
+              if (!item[field]) item[field] = [];
+              item[field].push(newData.$push[field]);
+            }
+          }
+          if (newData.$min) {
+            for (const field in newData.$min) {
+              item[field] = Math.min(item[field] || 0, newData.$min[field]);
+            }
+          }
+          if (newData.$max) {
+            for (const field in newData.$max) {
+              item[field] = Math.max(item[field] || 0, newData.$max[field]);
+            }
+          }
+          if (newData.$currentDate) {
+            for (const field in newData.$currentDate) {
+              if (
+                typeof newData.$currentDate[field] === "boolean" &&
+                newData.$currentDate[field]
+              ) {
+                item[field] = new Date().toISOString();
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "date"
+              ) {
+                item[field] = new Date().toISOString().slice(0, 10);
+              } else if (
+                newData.$currentDate[field] &&
+                (newData.$currentDate[field] as any).$type === "timestamp"
+              ) {
+                item[field] = new Date().toISOString();
+              }
+            }
+          }
+          break;
+        }
+      }
+
+      if (!matchFound && upsert) {
+        currentData.push(newData);
+        updatedDocument = newData;
+        updatedCount++;
+      }
+
+      if (!matchFound && !upsert) {
+        return {
+          acknowledged: true,
+          errorMessage: `No document found matching the search query.`,
+          results: null,
+        };
+      }
+
+      
+      fs.writeFileSync(dataname, yaml.stringify(currentData), "utf8");
+
+      logSuccess({
+        content: "Data has been updated",
+        devLogs: this.devLogs,
+      });
+
+      this.emit("dataUpdated", updatedDocument);
+
+      return {
+        acknowledged: true,
+        message: `${updatedCount} document(s) updated successfully.`,
+        results: updatedDocument,
+      };
+    } catch (e: any) {
+      this.emit("error", e.message);
+
+      return {
+        acknowledged: false,
+        errorMessage: `${e.message}`,
+        results: null,
+      };
+    }
+  }
+
   async drop(dataname: string): Promise<AdapterResults> {
     try {
       const currentData = this.load(dataname);
@@ -558,16 +690,13 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
-  async search(
-    dataPath: string,
-    collectionFilters: CollectionFilter[]
-  ): Promise<AdapterResults> {
-    const results: SearchResult = {};
-    for (const filter of collectionFilters) {
-      const { dataname, displayment, filter: query } = filter;
-      const filePath = path.join(dataPath, `${dataname}.yaml`);
+  async search(dataPath: string, collectionFilters: CollectionFilter[]) {
+    try {
+      const results: SearchResult = {};
+      for (const filter of collectionFilters) {
+        const { dataname, displayment, filter: query } = filter;
+        const filePath = path.join(dataPath, `${dataname}.yaml`);
 
-      try {
         const data = await fs.promises.readFile(filePath, "utf-8");
         const yamlData = yaml.parse(data);
 
@@ -589,52 +718,63 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
         }
 
         results[dataname] = result;
-      } catch (error) {
-        logError({
-          content: "Search operation is not supported by the current adapter.",
-          devLogs: this.devLogs,
-          throwErr: true,
-        });
       }
-    }
 
-    return results;
+      return {
+        acknowledged: true,
+        message: "Succefully searched in data for the given query.",
+        errorMessage: null,
+        results: results,
+      };
+    } catch (e: any) {
+      logError({
+        content: e.message,
+        devLogs: this.devLogs,
+        throwErr: false,
+      });
+
+      return {
+        acknowledged: true,
+        errorMessage: `${e.message}`,
+        results: null,
+      };
+    }
   }
 
-  private applyUpdateToJsonObject(
+  private applyUpdateToyamlObject(
     newData: operationKeys,
     columns: string[],
-    jsonObject: Record<string, any>
+    yamlObject: Record<string, any>
   ) {
     if (newData.$inc) {
       for (const field in newData.$inc) {
         if (columns.includes(field)) {
-          jsonObject[field] = (jsonObject[field] || 0) + newData.$inc[field];
+          yamlObject[field] = (yamlObject[field] || 0) + newData.$inc[field];
         }
       }
     }
     if (newData.$set) {
       for (const field in newData.$set) {
         if (columns.includes(field)) {
-          jsonObject[field] = newData.$set[field];
+          yamlObject[field] = newData.$set[field];
         }
       }
     }
     if (newData.$push) {
       for (const field in newData.$push) {
         if (columns.includes(field)) {
-          if (!jsonObject[field]) {
-            jsonObject[field] = [];
+          if (!yamlObject[field]) {
+            yamlObject[field] = [];
           }
-          jsonObject[field].push(newData.$push[field]);
+          yamlObject[field].push(newData.$push[field]);
         }
       }
     }
     if (newData.$min) {
       for (const field in newData.$min) {
         if (columns.includes(field)) {
-          jsonObject[field] = Math.min(
-            jsonObject[field] || 0,
+          yamlObject[field] = Math.min(
+            yamlObject[field] || 0,
             newData.$min[field]
           );
         }
@@ -643,8 +783,8 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
     if (newData.$max) {
       for (const field in newData.$max) {
         if (columns.includes(field)) {
-          jsonObject[field] = Math.max(
-            jsonObject[field] || 0,
+          yamlObject[field] = Math.max(
+            yamlObject[field] || 0,
             newData.$max[field]
           );
         }
@@ -656,17 +796,17 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           typeof newData.$currentDate[field] === "boolean" &&
           newData.$currentDate[field]
         ) {
-          jsonObject[field] = new Date().toISOString();
+          yamlObject[field] = new Date().toISOString();
         } else if (
           newData.$currentDate[field] &&
           (newData.$currentDate[field] as any).$type === "date"
         ) {
-          jsonObject[field] = new Date().toISOString().slice(0, 10);
+          yamlObject[field] = new Date().toISOString().slice(0, 10);
         } else if (
           newData.$currentDate[field] &&
           (newData.$currentDate[field] as any).$type === "timestamp"
         ) {
-          jsonObject[field] = new Date().toISOString();
+          yamlObject[field] = new Date().toISOString();
         }
       }
     }

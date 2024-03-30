@@ -239,7 +239,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
-  async dataAll(
+  async loadAll(
     dataname: string,
     displayOptions: any
   ): Promise<AdapterResults> {
@@ -519,7 +519,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
   }
 
   async updateMany(
-    dataname: string,
+    dataname: any,
     queries: any[any],
     newData: operationKeys,
     upsert: boolean = false
@@ -624,6 +624,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         };
       }
 
+      
       fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
 
       logSuccess({

@@ -1,7 +1,7 @@
 {
   "name": "verse.db",
   "version": "1.0.0",
-  "description": "VERSE.db is the multiverse of the database, with json, sql, ymal and more... you can save data with the way you like faster than before, the new gen of the database",
+  "description": "verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.",
   "license": "MIT",
   "author": "marco5dev (Mark Maher)",
   "main": "./dist/index.js",

@@ -1,39 +1,89 @@
+import connect from "../core/connect";
+
 export interface JSONAdapter {
   load(dataname: string): Promise<any[]>;
   add(dataname: string, newData: any, options?: any): Promise<void>;
   find(dataname: string, query: any, options?: any): Promise<any[]>;
-  dataAll(dataname: string, displayOptions?: any): Promise<void>;
+  loadAll(dataname: string, displayOptions?: any): Promise<void>;
   remove(dataname: string, query: any, options?: any): Promise<void>;
   update(dataname: string, query: any, newData: any): Promise<void>;
   drop(dataname: string): Promise<void>;
-  search(collectionFilters: CollectionFilter[]): Promise<SearchResult>
+  search(collectionFilters: CollectionFilter[]): Promise<SearchResult>;
+  countDoc({
+    dataname,
+    query,
+  }: {
+    dataname: string;
+    query?: { [key: string]: string };
+  }): Promise<any>;
+  model(dataname: string, schema: any): any;
 }
 export interface SQLAdapter {
   load(dataname: string): Promise<void>;
-  createTable(dataName: string, tableName: string, tableDefinition?: string): Promise<void>;
-  insertData(dataName: string, tableName: string, data: any[]): Promise<void>;
-  find(dataName: string, tableName: string, condition?: string): Promise<void>;
-  removeData(dataName: string, tableName: string, dataToRemove: any[]): Promise<void>;
-  update(dataName: string, tableName: string, query: string, newData: any, upsert: boolean): Promise<void>;
-  allData(dataName: string, displayOption: DisplayOptions): Promise<void>;
-  updateMany(dataName: string, tableName: string, queries: any[], newData: operationKeys): Promise<void>
-  drop(dataName: string, tableName?: string): Promise<void>;
-  countDoc(dataName: string, tableName: string): Promise<void>;
-  dataSize(dataName: string): Promise<void>;
+  createTable(
+    dataname: string,
+    tableName: string,
+    tableDefinition?: string
+  ): Promise<void>;
+  insertData(dataname: string, tableName: string, data: any[]): Promise<void>;
+  find(dataname: string, tableName: string, condition?: string): Promise<void>;
+  removeData(
+    dataname: string,
+    tableName: string,
+    dataToRemove: any[]
+  ): Promise<void>;
+  update(
+    dataname: string,
+    tableName: string,
+    query: string,
+    newData: any,
+    upsert: boolean
+  ): Promise<void>;
+  loadAll(dataname: string, displayOption: DisplayOptions): Promise<void>;
+  updateMany(
+    dataname: string,
+    tableName: string,
+    queries: any[],
+    newData: operationKeys
+  ): Promise<void>;
+  drop(dataname: string, tableName?: string): Promise<void>;
+  countDoc(dataname: string, tableName: string): Promise<void>;
+  dataSize(dataname: string): Promise<void>;
   migrateTable({ from, to, table }: MigrationParams): Promise<void>;
-  removeKey(dataName: string, tableName: string, keyToRemove: string, valueToRemove: string): Promise<void>;
+  removeKey(
+    dataname: string,
+    tableName: string,
+    keyToRemove: string,
+    valueToRemove: string
+  ): Promise<void>;
   toJSON(from: string): Promise<void>;
+  countDoc({
+    dataname,
+    query,
+  }: {
+    dataname: string;
+    query?: { [key: string]: string };
+  }): Promise<any>;
+  
 }
 
 export interface YAMLAdapter {
   load(dataname: string): Promise<any[]>;
   add(dataname: string, newData: any, options?: any): Promise<void>;
   find(dataname: string, query: any, options?: any): Promise<any[]>;
-  dataAll(dataname: string, displayOptions?: any): Promise<void>;
+  loadAll(dataname: string, displayOptions?: any): Promise<void>;
   remove(dataname: string, query: any, options?: any): Promise<void>;
   update(dataname: string, query: any, newData: any): Promise<void>;
   drop(dataname: string): Promise<void>;
   search(collectionFilters: CollectionFilter[]): Promise<SearchResult>;
+  countDoc({
+    dataname,
+    query,
+  }: {
+    dataname: string;
+    query?: { [key: string]: string };
+  }): Promise<any>;
+  model(dataname: string, schema: any): any;
 }
 
 export interface DevLogsOptions {
@@ -63,7 +113,7 @@ export interface AdapterOptions {
 }
 
 export interface CollectionFilter {
-  dataName: string;
+  dataname: string;
   displayment: number | null;
   filter?: any;
 }
@@ -78,7 +128,7 @@ export interface DisplayOptions {
   page: number;
   pageSize: number;
   displayment?: number | null;
-  groupBy?: string; 
+  groupBy?: string;
 }
 export interface MigrationParams {
   from: string;
@@ -92,6 +142,6 @@ export interface operationKeys {
   $push?: { [key: string]: any };
   $min?: { [key: string]: any };
   $max?: { [key: string]: any };
-  $currentDate?: { [key: string]: boolean | { $type: 'date' | 'timestamp' }};
+  $currentDate?: { [key: string]: boolean | { $type: "date" | "timestamp" } };
   upsert?: boolean;
 }

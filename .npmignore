@@ -10,3 +10,6 @@ tests
 tests/
 src
 tsconfig.json
+tsup.config.ts
+yarn.lock
+jest.config.js

@@ -9,6 +9,8 @@ import {
   DisplayOptions,
   operationKeys,
 } from "../types/connect";
+import { AdapterResults } from "../types/adapter";
+import Schema from "./schema";
 import { jsonAdapter, yamlAdapter, sqlAdapter } from "../adapters/export";
 import { logError, logWarning } from "./logger";
 import axios from "axios";
@@ -16,6 +18,11 @@ import axios from "axios";
 const packageJsonPath = path.resolve(process.cwd(), "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
 
+/**
+ * Gets the version of a library
+ * @param {any} library - The library to get the version of
+ * @returns {string} - The version of the library
+ */
 const getLibraryVersion = (library: any) => {
   const dependencies = packageJson.dependencies || {};
   const devDependencies = packageJson.devDependencies || {};
@@ -27,6 +34,10 @@ const getLibraryVersion = (library: any) => {
   return version;
 };
 
+/**
+ * Checks for updates for the versedb library
+ * @returns {Promise<void>} - Resolves when the check is complete
+ */
 async function check() {
   return await axios
     .get("https://registry.npmjs.com/-/v1/search?text=verse.db")
@@ -45,6 +56,9 @@ async function check() {
     });
 }
 
+/**
+ * The main connect class for interacting with the database
+ */
 export default class connect {
   public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null;
   public dataPath: string = "";
@@ -53,6 +67,10 @@ export default class connect {
   public backup: BackupOptions = { enable: false, path: "", retention: 0 };
   public fileType: string = "";
 
+  /**
+   * Sets up a database with one of the adapters
+   * @param {AdapterOptions} options - Options for setting up the adapter
+   */
   constructor(options: AdapterOptions) {
     this.dataPath = options.dataPath;
     this.devLogs = options.devLogs;
@@ -97,7 +115,12 @@ export default class connect {
     }
   }
 
-  async load(dataName: string) {
+  /**
+   * Load data from a file
+   * @param {string} dataname - The name of the data file
+   * @returns {Promise<any[]>} - A Promise that resolves with the loaded data
+   */
+  async load(dataname: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -106,11 +129,18 @@ export default class connect {
       });
     }
 
-    const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+    const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
     return await this.adapter?.load(filePath);
   }
 
-  async add(dataName: string, newData: any, options?: any) {
+  /**
+   * Add data to a data file
+   * @param {string} dataname - The name of the data file
+   * @param {any} newData - The new data to add
+   * @param {object} [options] - Additional options
+   * @returns {Promise<any>} - A Promise that resolves with the saved data
+   */
+  async add(dataname: string, newData: any, options?: any) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -123,7 +153,7 @@ export default class connect {
       !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.add === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.add(filePath, newData, options);
     } else {
       logError({
@@ -134,7 +164,12 @@ export default class connect {
     }
   }
 
-  async find(dataName: string, query: any) {
+  /**
+   * @param dataname the data file name
+   * @param query the search query
+   * @returns the found data
+   */
+  async find(dataname: string, query: any) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -147,7 +182,7 @@ export default class connect {
       !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.add === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.find(filePath, query);
     } else {
       logError({
@@ -158,7 +193,13 @@ export default class connect {
     }
   }
 
-  async allData(dataName: string, displayOptions: any) {
+  /**
+   *
+   * @param dataname the name of data files to get multiple files in the same time
+   * @param displayOptions the options of the display of the data files
+   * @returns all the data files you selected
+   */
+  async loadAll(dataname: string, displayOptions: any) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -169,10 +210,10 @@ export default class connect {
 
     if (
       !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.dataAll === "function"
+      typeof this.adapter?.loadAll === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
-      return await this.adapter?.dataAll(filePath, displayOptions);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.loadAll(filePath, displayOptions);
     } else {
       logError({
         content:
@@ -183,7 +224,14 @@ export default class connect {
     }
   }
 
-  async remove(dataName: string, query: any, options: { docCount: number }) {
+  /**
+   * @param dataname the name of the data file you want to edit an item in
+   * @param query the search query of the item you want to edit
+   * @param newData the new data that will be edited with the old one
+   * @param upsert an upsert option
+   * @returns returnts edited data
+   */
+  async remove(dataname: string, query: any, options: { docCount: number }) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -196,7 +244,7 @@ export default class connect {
       !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.remove === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.remove(filePath, query, {
         docCount: options?.docCount,
       });
@@ -209,7 +257,15 @@ export default class connect {
     }
   }
 
-  async update(dataName: string, query: any, newData: any, upsert: boolean) {
+  /**
+   * edit functions for the data in the database
+   * @param dataname the name of the data file you want to edit an item in
+   * @param query the search query of the item you want to edit
+   * @param newData the new data that will be edited with the old one
+   * @param upsert an upsert option
+   * @returns returnts edited data
+   */
+  async update(dataname: string, query: any, newData: any, upsert: boolean) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -222,7 +278,7 @@ export default class connect {
       !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.add === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.update(filePath, query, newData, upsert);
     } else {
       logError({
@@ -233,7 +289,11 @@ export default class connect {
     }
   }
 
-  async drop(dataName: string) {
+  /**
+   * @param dataname the name of the data you want to drop
+   * @returns empty the file you dropped
+   */
+  async drop(dataname: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -243,7 +303,7 @@ export default class connect {
     }
 
     if (typeof this.adapter?.drop === "function") {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.drop(filePath);
     } else {
       logError({
@@ -254,6 +314,11 @@ export default class connect {
     }
   }
 
+  /**
+   * full search method to find in all the database
+   * @param collectionFilters filters for search in all the database
+   * @returns search in all the database files
+   */
   async search(collectionFilters: CollectionFilter[]) {
     if (!this.adapter) {
       logError({
@@ -295,8 +360,15 @@ export default class connect {
     }
   }
 
+  /**
+   * a function to create a new table in SQL database (Note*: this is only supported for SQL adapter)
+   * @param dataname the name of the data file
+   * @param tableName the table name
+   * @param tableDefinition the definition of the table
+   * @returns new table in the database
+   */
   async createTable(
-    dataName: string,
+    dataname: string,
     tableName: string,
     tableDefinition: string
   ) {
@@ -315,7 +387,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.createTable === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.createTable(
         filePath,
         tableName,
@@ -330,7 +402,14 @@ export default class connect {
     }
   }
 
-  async insertData(dataName: string, tableName: string, data: any[]) {
+  /**
+   * a function to insert data to a table in the database (Note*: this is only supported for SQL adapter)
+   * @param dataname the name of the data file
+   * @param tableName the name of the table you want to insert the data to
+   * @param data the date that is going to be inserted
+   * @returns inserted data to the table in the database file
+   */
+  async insertData(dataname: string, tableName: string, data: any[]) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -346,7 +425,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.insertData === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.insertData(filePath, tableName, data);
     } else {
       logError({
@@ -357,7 +436,14 @@ export default class connect {
     }
   }
 
-  async findData(dataName: string, tableName: string, condition?: string) {
+  /**
+   * a function to find data in a table (Note*: this is only supported for SQL adapter)
+   * @param dataname the name of the data file
+   * @param tableName the name of the table to find in
+   * @param condition the conditions you want to find with
+   * @returns found data
+   */
+  async findData(dataname: string, tableName: string, condition?: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -373,7 +459,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.find === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.find(filePath, tableName, condition);
     } else {
       logError({
@@ -384,7 +470,14 @@ export default class connect {
     }
   }
 
-  async removeData(dataName: string, tableName: string, dataToRemove: any[]) {
+  /**
+   * a function to remove data from a table (Note*: this is only supported for SQL adapter)
+   * @param dataname the name of the data file you want to use
+   * @param tableName the name of the table
+   * @param dataToRemove the date you want to remove
+   * @returns removed data from the table
+   */
+  async removeData(dataname: string, tableName: string, dataToRemove: any[]) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -400,7 +493,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.removeData === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.removeData(filePath, tableName, dataToRemove);
     } else {
       logError({
@@ -411,8 +504,16 @@ export default class connect {
     }
   }
 
+  /**
+   * a fundtion to update the data in the sql database (Note*: this is only supported for SQL adapter)
+   * @param dataname the name of date file
+   * @param tableName the table name
+   * @param query the search query
+   * @param newData the new data that is going to be replaced with the old data
+   * @returns updataed data
+   */
   async updateData(
-    dataName: string,
+    dataname: string,
     tableName: string,
     query: any,
     newData: operationKeys
@@ -432,7 +533,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.update === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.update(filePath, tableName, query, newData);
     } else {
       logError({
@@ -443,8 +544,16 @@ export default class connect {
     }
   }
 
+  /**
+   * a function to multi update operation (Note*: this is only supported for SQL adapter)
+   * @param dataname the data file name you want to update
+   * @param tableName the tables name
+   * @param queries the queries you want to search with
+   * @param newData the new data that is going to be replaced with the old data
+   * @returns updated data in multiple files or tables
+   */
   async multiUpdate(
-    dataName: string,
+    dataname: string,
     tableName: string,
     queries: any[],
     newData: operationKeys
@@ -464,7 +573,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.updateMany === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.updateMany(
         filePath,
         tableName,
@@ -480,7 +589,13 @@ export default class connect {
     }
   }
 
-  async displayAll(dataName: string, displayOption: DisplayOptions) {
+  /**
+   * a function to display all the data in the sql adapter database (Note*: this is only supported for SQL adapter)
+   * @param dataname the date names you want to display
+   * @param displayOption the display options you want to display
+   * @returns all the data you want to display
+   */
+  async displayAll(dataname: string, displayOption: DisplayOptions) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -496,7 +611,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.allData === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.allData(filePath, displayOption);
     } else {
       logError({
@@ -507,7 +622,13 @@ export default class connect {
     }
   }
 
-  async dropData(dataName: string, tableName?: string) {
+  /**
+   * a function to drop data ot a table (Note*: this is only supported for SQL adapter)
+   * @param dataname the data file name you want to drop
+   * @param tableName the table name you want to drop
+   * @returns droped data
+   */
+  async dropData(dataname: string, tableName?: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -523,7 +644,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.drop === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.drop(filePath, tableName);
     } else {
       logError({
@@ -534,7 +655,13 @@ export default class connect {
     }
   }
 
-  async countDoc(dataName: string, tableName: string) {
+  /**
+   * a function to count the data documents in the database (Note*: this is only supported for SQL adapter)
+   * @param dataname the data file name
+   * @param tableName the table name
+   * @returns documents count
+   */
+  async countDoc(dataname: string, tableName: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -550,7 +677,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.countDoc === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.countDoc(filePath, tableName);
     } else {
       logError({
@@ -561,7 +688,12 @@ export default class connect {
     }
   }
 
-  async countTable(dataName: string) {
+  /**
+   * a function to give you the count of the tables in the dataname file (Note*: this is only supported for SQL adapter)
+   * @param dataname the data file name you want to get the number of the tables in
+   * @returns number of the tables in the dataname
+   */
+  async countTable(dataname: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -577,7 +709,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.countTable === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.countTable(filePath);
     } else {
       logError({
@@ -588,7 +720,12 @@ export default class connect {
     }
   }
 
-  async dataSize(dataName: string) {
+  /**
+   * a function to give you the size of the database (Note*: this is only supported for SQL adapter)
+   * @param dataname the data file name to get the size of
+   * @returns the size of the data file
+   */
+  async dataSize(dataname: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -604,7 +741,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.dataSize === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.dataSize(filePath);
     } else {
       logError({
@@ -615,7 +752,14 @@ export default class connect {
     }
   }
 
-  async removeKey(dataName: string, tableName: string, keyToRemove: string) {
+  /**
+   * a funciton to remove a key from the database table (Note*: this is only supported for SQL adapter)
+   * @param dataname the data file name
+   * @param tableName the table name
+   * @param keyToRemove the key you want to remove
+   * @returns removed key
+   */
+  async removeKey(dataname: string, tableName: string, keyToRemove: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -631,7 +775,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.removeKey === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.removeKey(filePath, tableName, keyToRemove);
     } else {
       logError({
@@ -642,7 +786,14 @@ export default class connect {
     }
   }
 
-  async toJSON(dataName: string, tableName: string, keyToRemove: string) {
+  /**
+   *
+   * @param dataname the data file name you want (Note*: this is only supported for SQL adapter)
+   * @param tableName the table name you want
+   * @param keyToRemove the key to remove
+   * @returns removed key
+   */
+  async toJSON(dataname: string, tableName: string, keyToRemove: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -658,7 +809,7 @@ export default class connect {
       ) &&
       typeof this.adapter?.removeKey === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataName}.${this.fileType}`);
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.toJSON(filePath);
     } else {
       logError({
@@ -669,6 +820,13 @@ export default class connect {
     }
   }
 
+  /**
+   * a function to move a table from a database to another database file (Note*: this is only supported for SQL adapter)
+   * @param {from} from the dataname
+   * @param {to} to the dataname
+   * @param {table} the table you want to move
+   * @returns moved table
+   */
   async moveTable({
     from,
     to,
@@ -706,6 +864,256 @@ export default class connect {
     } else {
       logError({
         content: "Move Table operation only supports sql adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * a funciton to get the info of a json/yaml file
+   * @param {dataname} options an option to get the info of a supusfic data file
+   * @returns
+   */
+  async info(options: { dataname?: string }): Promise<AdapterResults> {
+    const dataPathFull = path.resolve(this.dataPath);
+
+    try {
+      const stats = await fs.promises.stat(dataPathFull);
+      if (!stats.isDirectory()) {
+        logError({
+          content: "Not a Directory",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return {
+          acknowledged: false,
+          message: "Not a Directory",
+          errorMessage: "Not a Directory",
+          error: new Error("Not a Directory"),
+        };
+      }
+      const dataPathStats = await fs.promises.readdir(dataPathFull, {
+        withFileTypes: true,
+      });
+      const fileStats = await Promise.all(
+        dataPathStats.map((stat) =>
+          stat.isFile()
+            ? fs.promises.stat(path.resolve(dataPathFull, stat.name))
+            : Promise.resolve(null)
+        )
+      );
+      const filesSize = fileStats.filter(Boolean).map((stat: any) => stat.size);
+      const filesMetadata = dataPathStats
+        .filter((stat: any) => stat.isFile())
+        .map((stat: any) => ({
+          filename: stat.name,
+          size: stat.isFile()
+            ? fileStats.find((f: any) => f.isFile() && f.ino === stat.ino)
+                ?.size || 0
+            : 0,
+        }));
+
+      const files: { name: string; size: number }[] = [];
+
+      const entries = await fs.promises.readdir(this.dataPath, {
+        withFileTypes: true,
+      });
+
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          if (options.dataname && entry.name !== options.dataname) {
+            continue;
+          }
+          const filePath = path.join(this.dataPath, entry.name);
+          const fileStats = await fs.promises.stat(filePath);
+          files.push({
+            name: entry.name,
+            size: fileStats.size,
+          });
+        }
+      }
+
+      return {
+        acknowledged: true,
+        message: "Loaded and detected database size",
+        results: {
+          files: filesMetadata,
+          totalSize: filesSize.reduce((total, size) => total + size, 0),
+        },
+      };
+    } catch (error: any) {
+      logError({
+        content: `Error in info function: ${error.message}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return {
+        acknowledged: false,
+        message: "Data failed tobe loaded",
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * a funciton to get the number of objects in a file
+   * @param {dataname} the name of the data you want to get the number of the objects inside it
+   * @param {query} an optional query to get the number of the objects that only contains this query
+   * @returns number of objects in a file
+   */
+  async countDocuments({
+    dataname,
+    query,
+  }: {
+    dataname: string;
+    query?: { [key: string]: string };
+  }): Promise<AdapterResults> {
+    const dataPathFull = path.resolve(this.dataPath);
+
+    try {
+      const stats = await fs.promises.stat(dataPathFull);
+
+      if (!stats.isDirectory()) {
+        return {
+          acknowledged: false,
+          message: "Not a Directory",
+          errorMessage: "Not a Directory",
+          error: new Error("Not a Directory"),
+        };
+      }
+
+      const dataPathStats = await fs.promises.readdir(dataPathFull, {
+        withFileTypes: true,
+      });
+      const fileStats = await Promise.all(
+        dataPathStats.map((stat: any) =>
+          stat.isFile()
+            ? fs.promises.stat(path.resolve(dataPathFull, stat.name))
+            : Promise.resolve(null)
+        )
+      );
+
+      let matchingFiles = fileStats.filter((stat: any) => stat !== null);
+
+      if (dataname) {
+        matchingFiles = matchingFiles.filter(
+          (stat: any) => path.basename(stat.name, ".json") === dataname
+        );
+      }
+
+      if (query) {
+        const keys = Object.keys(query);
+
+        matchingFiles = matchingFiles.filter(async (stat: any) => {
+          const fileData = JSON.parse(
+            await fs.promises.readFile(stat.name, "utf-8")
+          );
+
+          for (const key of keys) {
+            if (fileData[key] !== query[key]) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+      }
+
+      return {
+        acknowledged: true,
+        message: "Counted documents based on the provided query",
+        results: {
+          count: matchingFiles.length,
+        },
+      };
+    } catch (error: any) {
+      logError({
+        content: `Error in countDoc function: ${error.message}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+
+      return {
+        acknowledged: false,
+        message: "Failed to count the documents",
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * @param dataname the schema name
+   * @param schema the schema defination
+   * @returns {add} to add data to the database
+   * @returns {remove} to remove data to the database
+   * @returns {update} to update data from the database
+   * @returns {find} to find data in the database
+   * @returns {load} to load a database
+   * @returns {drop} to drop a database
+   */
+  model(dataname: string, schema: Schema): any {
+    if (!dataname || !schema) {
+      logError({
+        content:
+          'Please add a name for the data file ex:.. db.model("dataname", schema)',
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      !(this.adapter instanceof sqlAdapter) &&
+      typeof this.adapter?.add === "function"
+    ) {
+      return {
+        add: async function (this: connect, newData: any, options?: any) {
+          const validationErrors: any = schema.validate(newData);
+          if (validationErrors) {
+            return Promise.reject(validationErrors);
+          }
+
+          return this.add(dataname, newData, options);
+        }.bind(this),
+
+        remove: async function (
+          this: connect,
+          query: any,
+          options: { docCount: number }
+        ) {
+          return this.remove(dataname, query, options);
+        }.bind(this),
+
+        update: async function (
+          this: connect,
+          query: any,
+          newData: any,
+          upsert: boolean
+        ) {
+          const validationErrors: any = schema.validate(newData);
+          if (validationErrors) {
+            return Promise.reject(validationErrors);
+          }
+
+          return this.update(dataname, query, newData, upsert);
+        }.bind(this),
+
+        find: async function (this: connect, query: any) {
+          return this.find(dataname, query);
+        }.bind(this),
+
+        load: async function (this: connect) {
+          return this.load(dataname);
+        }.bind(this),
+
+        drop: async function (this: connect) {
+          return this.drop(dataname);
+        }.bind(this),
+      };
+    } else {
+      logError({
+        content:
+          "Add operation is not supported by the current adapter. Please switch to JSON or YAML adapter to use this operation.",
         devLogs: this.devLogs,
         throwErr: true,
       });
