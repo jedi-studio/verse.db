@@ -389,102 +389,274 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
 
   async update(
     dataname: string,
-    queries: any,
-    newData: operationKeys,
+    query: any,
+    updateQuery: any,
     upsert: boolean = false
-  ) {
+  ): Promise<AdapterResults> {
     try {
-      if (!queries) {
+      if (!query) {
         return {
           acknowledged: false,
           errorMessage: `Search query is not provided`,
           results: null,
         };
       }
-
-      if (!newData) {
+  
+      if (!updateQuery) {
         return {
           acknowledged: false,
-          errorMessage: `New data is not provided`,
+          errorMessage: `Update query is not provided`,
           results: null,
         };
       }
-
+  
       const currentData: any[] = await this.load(dataname);
-
+  
       let updatedCount = 0;
       let updatedDocument: any = null;
       let matchFound = false;
-
-      for (let index of currentData.keys()) {
-        const item: any = currentData[index];
+  
+      currentData.some((item: any) => {
         let match = true;
-
-        for (const key of Object.keys(queries)) {
-          if (item[key] !== queries[key]) {
-            match = false;
-            break;
+  
+        for (const key of Object.keys(query)) {
+          if (typeof query[key] === "object") {
+            const operator = Object.keys(query[key])[0];
+            const value = query[key][operator];
+            switch (operator) {
+              case "$gt":
+                if (!(item[key] > value)) {
+                  match = false;
+                }
+                break;
+              case "$lt":
+                if (!(item[key] < value)) {
+                  match = false;
+                }
+                break;
+              case "$or":
+                if (!query[key].some((condition: any) => item[key] === condition)) {
+                  match = false;
+                }
+                break;
+              default:
+                if (item[key] !== value) {
+                  match = false;
+                }
+            }
+          } else {
+            if (item[key] !== query[key]) {
+              match = false;
+              break;
+            }
           }
         }
-
+  
         if (match) {
-          // Process special $ operations
-          if (newData.$inc) {
-            for (const field in newData.$inc) {
-              item[field] = (item[field] || 0) + newData.$inc[field];
+          for (const key of Object.keys(updateQuery)) {
+            if (key.startsWith("$")) {
+              switch (key) {
+                case "$set":
+                  Object.assign(item, updateQuery.$set);
+                  break;
+                case "$unset":
+                  for (const field of Object.keys(updateQuery.$unset)) {
+                    delete item[field];
+                  }
+                  break;
+                case "$inc":
+                  for (const field of Object.keys(updateQuery.$inc)) {
+                    item[field] = (item[field] || 0) + updateQuery.$inc[field];
+                  }
+                  break;
+                case "$currentDate":
+                  for (const field of Object.keys(updateQuery.$currentDate)) {
+                    item[field] = new Date();
+                  }
+                  break;
+                case "$push":
+                  for (const field of Object.keys(updateQuery.$push)) {
+                    if (!item[field]) {
+                      item[field] = [];
+                    }
+                    if (Array.isArray(updateQuery.$push[field])) {
+                      item[field].push(...updateQuery.$push[field]);
+                    } else {
+                      item[field].push(updateQuery.$push[field]);
+                    }
+                  }
+                  break;
+                case "$pull":
+                  for (const field of Object.keys(updateQuery.$pull)) {
+                    if (Array.isArray(item[field])) {
+                      item[field] = item[field].filter((val: any) => val !== updateQuery.$pull[field]);
+                    }
+                  }
+                  break;
+                case "$position":
+                  for (const field of Object.keys(updateQuery.$position)) {
+                    const { index, element } = updateQuery.$position[field];
+                    if (Array.isArray(item[field])) {
+                      item[field].splice(index, 0, element);
+                    }
+                  }
+                  break;
+                case "$max":
+                  for (const field of Object.keys(updateQuery.$max)) {
+                    item[field] = Math.max(item[field] || Number.NEGATIVE_INFINITY, updateQuery.$max[field]);
+                  }
+                  break;
+                case "$min":
+                  for (const field of Object.keys(updateQuery.$min)) {
+                    item[field] = Math.min(item[field] || Number.POSITIVE_INFINITY, updateQuery.$min[field]);
+                  }
+                  break;
+                case "$lt":
+                  for (const field of Object.keys(updateQuery.$lt)) {
+                    if (item[field] < updateQuery.$lt[field]) {
+                      item[field] = updateQuery.$lt[field];
+                    }
+                  }
+                  break;
+                case "$gt":
+                  for (const field of Object.keys(updateQuery.$gt)) {
+                    if (item[field] > updateQuery.$gt[field]) {
+                      item[field] = updateQuery.$gt[field];
+                    }
+                  }
+                  break;
+                case "$or":
+                  const orConditions = updateQuery.$or;
+                  const orMatch = orConditions.some((condition: any) => {
+                    for (const field of Object.keys(condition)) {
+                      if (item[field] !== condition[field]) {
+                        return false;
+                      }
+                    }
+                    return true;
+                  });
+                  if (orMatch) {
+                    Object.assign(item, updateQuery.$set);
+                  }
+                  break;
+                case "$addToSet":
+                  for (const field of Object.keys(updateQuery.$addToSet)) {
+                    if (!item[field]) {
+                      item[field] = [];
+                    }
+                    if (!item[field].includes(updateQuery.$addToSet[field])) {
+                      item[field].push(updateQuery.$addToSet[field]);
+                    }
+                  }
+                  break;
+                case "$pushAll":
+                  for (const field of Object.keys(updateQuery.$pushAll)) {
+                    if (!item[field]) {
+                      item[field] = [];
+                    }
+                    item[field].push(...updateQuery.$pushAll[field]);
+                  }
+                  break;
+                case "$pop":
+                  for (const field of Object.keys(updateQuery.$pop)) {
+                    if (Array.isArray(item[field])) {
+                      if (updateQuery.$pop[field] === -1) {
+                        item[field].shift();
+                      } else if (updateQuery.$pop[field] === 1) {
+                        item[field].pop();
+                      }
+                    }
+                  }
+                  break;
+                case "$pullAll":
+                  for (const field of Object.keys(updateQuery.$pullAll)) {
+                    if (Array.isArray(item[field])) {
+                      item[field] = item[field].filter((val: any) => !updateQuery.$pullAll[field].includes(val));
+                    }
+                  }
+                  break;
+                case "$rename":
+                  for (const field of Object.keys(updateQuery.$rename)) {
+                    item[updateQuery.$rename[field]] = item[field];
+                    delete item[field];
+                  }
+                  break;
+                case "$bit":
+                  for (const field of Object.keys(updateQuery.$bit)) {
+                    if (typeof item[field] === "number") {
+                      item[field] = item[field] & updateQuery.$bit[field];
+                    }
+                  }
+                  break;
+                case "$mul":
+                  for (const field of Object.keys(updateQuery.$mul)) {
+                    item[field] = (item[field] || 0) * updateQuery.$mul[field];
+                  }
+                  break;
+                  case "$each":
+                    if (updateQuery.$push) {
+                      for (const field of Object.keys(updateQuery.$push)) {
+                        const elementsToAdd = updateQuery.$push[field].$each;
+                        if (!item[field]) {
+                          item[field] = [];
+                        }
+                        if (Array.isArray(elementsToAdd)) {
+                          item[field].push(...elementsToAdd);
+                        }
+                      }
+                    } else if (updateQuery.$addToSet) {
+                      for (const field of Object.keys(updateQuery.$addToSet)) {
+                        const elementsToAdd = updateQuery.$addToSet[field].$each;
+                        if (!item[field]) {
+                          item[field] = [];
+                        }
+                        if (Array.isArray(elementsToAdd)) {
+                          elementsToAdd.forEach((element: any) => {
+                            if (!item[field].includes(element)) {
+                              item[field].push(element);
+                            }
+                          });
+                        }
+                      }
+                    }
+                    break;                  
+                case "$slice":
+                  for (const field of Object.keys(updateQuery.$slice)) {
+                    if (Array.isArray(item[field])) {
+                      item[field] = item[field].slice(updateQuery.$slice[field]);
+                    }
+                  }
+                  break;
+                case "$sort":
+                  for (const field of Object.keys(updateQuery.$sort)) {
+                    if (Array.isArray(item[field])) {
+                      item[field].sort((a: any, b: any) => a - b);
+                    }
+                  }
+                  break;
+                  default:
+                    throw new Error(`Unsupported operator: ${key}`); 
+                  }
+            } else {
+              item[key] = updateQuery[key];
             }
           }
-          if (newData.$set) {
-            for (const field in newData.$set) {
-              item[field] = newData.$set[field];
-            }
-          }
-          if (newData.$push) {
-            for (const field in newData.$push) {
-              if (!item[field]) item[field] = [];
-              item[field].push(newData.$push[field]);
-            }
-          }
-          if (newData.$min) {
-            for (const field in newData.$min) {
-              item[field] = Math.min(item[field] || 0, newData.$min[field]);
-            }
-          }
-          if (newData.$max) {
-            for (const field in newData.$max) {
-              item[field] = Math.max(item[field] || 0, newData.$max[field]);
-            }
-          }
-          if (newData.$currentDate) {
-            for (const field in newData.$currentDate) {
-              if (
-                typeof newData.$currentDate[field] === "boolean" &&
-                newData.$currentDate[field]
-              ) {
-                item[field] = new Date().toISOString();
-              } else if (
-                newData.$currentDate[field] &&
-                (newData.$currentDate[field] as any).$type === "date"
-              ) {
-                item[field] = new Date().toISOString().slice(0, 10);
-              } else if (
-                newData.$currentDate[field] &&
-                (newData.$currentDate[field] as any).$type === "timestamp"
-              ) {
-                item[field] = new Date().toISOString();
-              }
-            }
-          }
-          break;
+  
+          updatedDocument = item;
+          updatedCount++;
+          matchFound = true;
+  
+          return true;
         }
-      }
-
+      });
+  
       if (!matchFound && upsert) {
+        const newData = { ...query, ...updateQuery.$set };
         currentData.push(newData);
         updatedDocument = newData;
         updatedCount++;
       }
-
+  
       if (!matchFound && !upsert) {
         return {
           acknowledged: true,
@@ -492,16 +664,16 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
           results: null,
         };
       }
-
+  
       fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
-
+  
       logSuccess({
         content: "Data has been updated",
         devLogs: this.devLogs,
       });
-
+  
       this.emit("dataUpdated", updatedDocument);
-
+  
       return {
         acknowledged: true,
         message: `${updatedCount} document(s) updated successfully.`,
@@ -509,7 +681,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       };
     } catch (e: any) {
       this.emit("error", e.message);
-
+  
       return {
         acknowledged: false,
         errorMessage: `${e.message}`,
@@ -519,129 +691,266 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
   }
 
   async updateMany(
-    dataname: any,
-    queries: any[any],
-    newData: operationKeys,
-    upsert: boolean = false
-  ) {
+    dataname: string,
+    query: any,
+    updateQuery: any
+  ): Promise<AdapterResults> {
     try {
-      if (!queries) {
+      if (!query) {
         return {
           acknowledged: false,
           errorMessage: `Search query is not provided`,
           results: null,
         };
       }
-
-      if (!newData) {
+  
+      if (!updateQuery) {
         return {
           acknowledged: false,
-          errorMessage: `New data is not provided`,
+          errorMessage: `Update query is not provided`,
           results: null,
         };
       }
-
+  
       const currentData: any[] = await this.load(dataname);
-
+  
       let updatedCount = 0;
-      let updatedDocument: any = null;
-      let matchFound = false;
-
-      for (let index of currentData.keys()) {
-        const item: any = currentData[index];
+      let updatedDocuments: any[] = [];
+  
+      currentData.forEach((item: any) => {
         let match = true;
-
-        for (const key of Object.keys(queries)) {
-          if (item[key] !== queries[key]) {
-            match = false;
-            break;
+  
+        for (const key of Object.keys(query)) {
+          if (typeof query[key] === "object") {
+            const operator = Object.keys(query[key])[0];
+            const value = query[key][operator];
+            switch (operator) {
+              case "$gt":
+                if (!(item[key] > value)) {
+                  match = false;
+                }
+                break;
+              case "$lt":
+                if (!(item[key] < value)) {
+                  match = false;
+                }
+                break;
+              case "$or":
+                if (!query[key].some((condition: any) => item[key] === condition)) {
+                  match = false;
+                }
+                break;
+              default:
+                if (item[key] !== value) {
+                  match = false;
+                }
+            }
+          } else {
+            if (item[key] !== query[key]) {
+              match = false;
+              break;
+            }
           }
         }
-
+  
         if (match) {
-          // Process special $ operations
-          if (newData.$inc) {
-            for (const field in newData.$inc) {
-              item[field] = (item[field] || 0) + newData.$inc[field];
-            }
-          }
-          if (newData.$set) {
-            for (const field in newData.$set) {
-              item[field] = newData.$set[field];
-            }
-          }
-          if (newData.$push) {
-            for (const field in newData.$push) {
-              if (!item[field]) item[field] = [];
-              item[field].push(newData.$push[field]);
-            }
-          }
-          if (newData.$min) {
-            for (const field in newData.$min) {
-              item[field] = Math.min(item[field] || 0, newData.$min[field]);
-            }
-          }
-          if (newData.$max) {
-            for (const field in newData.$max) {
-              item[field] = Math.max(item[field] || 0, newData.$max[field]);
-            }
-          }
-          if (newData.$currentDate) {
-            for (const field in newData.$currentDate) {
-              if (
-                typeof newData.$currentDate[field] === "boolean" &&
-                newData.$currentDate[field]
-              ) {
-                item[field] = new Date().toISOString();
-              } else if (
-                newData.$currentDate[field] &&
-                (newData.$currentDate[field] as any).$type === "date"
-              ) {
-                item[field] = new Date().toISOString().slice(0, 10);
-              } else if (
-                newData.$currentDate[field] &&
-                (newData.$currentDate[field] as any).$type === "timestamp"
-              ) {
-                item[field] = new Date().toISOString();
+          for (const key of Object.keys(updateQuery)) {
+            if (key.startsWith("$")) {
+              switch (key) {
+                case "$set":
+                  Object.assign(item, updateQuery.$set);
+                  break;
+                case "$unset":
+                  for (const field of Object.keys(updateQuery.$unset)) {
+                    delete item[field];
+                  }
+                  break;
+                case "$inc":
+                  for (const field of Object.keys(updateQuery.$inc)) {
+                    item[field] = (item[field] || 0) + updateQuery.$inc[field];
+                  }
+                  break;
+                case "$currentDate":
+                  for (const field of Object.keys(updateQuery.$currentDate)) {
+                    item[field] = new Date();
+                  }
+                  break;
+                case "$push":
+                  for (const field of Object.keys(updateQuery.$push)) {
+                    if (!item[field]) {
+                      item[field] = [];
+                    }
+                    if (Array.isArray(updateQuery.$push[field])) {
+                      item[field].push(...updateQuery.$push[field]);
+                    } else {
+                      item[field].push(updateQuery.$push[field]);
+                    }
+                  }
+                  break;
+                case "$pull":
+                  for (const field of Object.keys(updateQuery.$pull)) {
+                    if (Array.isArray(item[field])) {
+                      item[field] = item[field].filter((val: any) => val !== updateQuery.$pull[field]);
+                    }
+                  }
+                  break;
+                case "$position":
+                  for (const field of Object.keys(updateQuery.$position)) {
+                    const { index, element } = updateQuery.$position[field];
+                    if (Array.isArray(item[field])) {
+                      item[field].splice(index, 0, element);
+                    }
+                  }
+                  break;
+                case "$max":
+                  for (const field of Object.keys(updateQuery.$max)) {
+                    item[field] = Math.max(item[field] || Number.NEGATIVE_INFINITY, updateQuery.$max[field]);
+                  }
+                  break;
+                case "$min":
+                  for (const field of Object.keys(updateQuery.$min)) {
+                    item[field] = Math.min(item[field] || Number.POSITIVE_INFINITY, updateQuery.$min[field]);
+                  }
+                  break;
+                case "$or":
+                  const orConditions = updateQuery.$or;
+                  const orMatch = orConditions.some((condition: any) => {
+                    for (const field of Object.keys(condition)) {
+                      if (item[field] !== condition[field]) {
+                        return false;
+                      }
+                    }
+                    return true;
+                  });
+                  if (orMatch) {
+                    Object.assign(item, updateQuery.$set);
+                  }
+                  break;
+                case "$addToSet":
+                  for (const field of Object.keys(updateQuery.$addToSet)) {
+                    if (!item[field]) {
+                      item[field] = [];
+                    }
+                    if (!item[field].includes(updateQuery.$addToSet[field])) {
+                      item[field].push(updateQuery.$addToSet[field]);
+                    }
+                  }
+                  break;
+                case "$pushAll":
+                  for (const field of Object.keys(updateQuery.$pushAll)) {
+                    if (!item[field]) {
+                      item[field] = [];
+                    }
+                    item[field].push(...updateQuery.$pushAll[field]);
+                  }
+                  break;
+                case "$pop":
+                  for (const field of Object.keys(updateQuery.$pop)) {
+                    if (Array.isArray(item[field])) {
+                      if (updateQuery.$pop[field] === -1) {
+                        item[field].shift();
+                      } else if (updateQuery.$pop[field] === 1) {
+                        item[field].pop();
+                      }
+                    }
+                  }
+                  break;
+                case "$pullAll":
+                  for (const field of Object.keys(updateQuery.$pullAll)) {
+                    if (Array.isArray(item[field])) {
+                      item[field] = item[field].filter((val: any) => !updateQuery.$pullAll[field].includes(val));
+                    }
+                  }
+                  break;
+                case "$rename":
+                  for (const field of Object.keys(updateQuery.$rename)) {
+                    item[updateQuery.$rename[field]] = item[field];
+                    delete item[field];
+                  }
+                  break;
+                case "$bit":
+                  for (const field of Object.keys(updateQuery.$bit)) {
+                    if (typeof item[field] === "number") {
+                      item[field] = item[field] & updateQuery.$bit[field];
+                    }
+                  }
+                  break;
+                case "$mul":
+                  for (const field of Object.keys(updateQuery.$mul)) {
+                    item[field] = (item[field] || 0) * updateQuery.$mul[field];
+                  }
+                  break;
+                case "$each":
+                  if (updateQuery.$push) {
+                    for (const field of Object.keys(updateQuery.$push)) {
+                      const elementsToAdd = updateQuery.$push[field].$each;
+                      if (!item[field]) {
+                        item[field] = [];
+                      }
+                      if (Array.isArray(elementsToAdd)) {
+                        item[field].push(...elementsToAdd);
+                      }
+                    }
+                  } else if (updateQuery.$addToSet) {
+                    for (const field of Object.keys(updateQuery.$addToSet)) {
+                      const elementsToAdd = updateQuery.$addToSet[field].$each;
+                      if (!item[field]) {
+                        item[field] = [];
+                      }
+                      if (Array.isArray(elementsToAdd)) {
+                        elementsToAdd.forEach((element: any) => {
+                          if (!item[field].includes(element)) {
+                            item[field].push(element);
+                          }
+                        });
+                      }
+                    }
+                  }
+                  break;
+                case "$slice":
+                  for (const field of Object.keys(updateQuery.$slice)) {
+                    if (Array.isArray(item[field])) {
+                      item[field] = item[field].slice(updateQuery.$slice[field]);
+                    }
+                  }
+                  break;
+                case "$sort":
+                  for (const field of Object.keys(updateQuery.$sort)) {
+                    if (Array.isArray(item[field])) {
+                      item[field].sort((a: any, b: any) => a - b);
+                    }
+                  }
+                  break;
+                default:
+                  throw new Error(`Unsupported Opperator: ${key}.`);
               }
+            } else {
+              item[key] = updateQuery[key];
             }
           }
-          break;
+  
+          updatedDocuments.push(item);
+          updatedCount++;
         }
-      }
-
-      if (!matchFound && upsert) {
-        currentData.push(newData);
-        updatedDocument = newData;
-        updatedCount++;
-      }
-
-      if (!matchFound && !upsert) {
-        return {
-          acknowledged: true,
-          errorMessage: `No document found matching the search query.`,
-          results: null,
-        };
-      }
-
-      
+      });
+  
       fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
-
+  
       logSuccess({
-        content: "Data has been updated",
+        content: `${updatedCount} document(s) updated`,
         devLogs: this.devLogs,
       });
-
-      this.emit("dataUpdated", updatedDocument);
-
+  
+      this.emit("dataUpdated", updatedDocuments);
+  
       return {
         acknowledged: true,
         message: `${updatedCount} document(s) updated successfully.`,
-        results: updatedDocument,
+        results: updatedDocuments,
       };
     } catch (e: any) {
       this.emit("error", e.message);
-
+  
       return {
         acknowledged: false,
         errorMessage: `${e.message}`,
@@ -737,77 +1046,6 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         errorMessage: `${e.message}`,
         results: null,
       };
-    }
-  }
-
-  private applyUpdateToJsonObject(
-    newData: operationKeys,
-    columns: string[],
-    jsonObject: Record<string, any>
-  ) {
-    if (newData.$inc) {
-      for (const field in newData.$inc) {
-        if (columns.includes(field)) {
-          jsonObject[field] = (jsonObject[field] || 0) + newData.$inc[field];
-        }
-      }
-    }
-    if (newData.$set) {
-      for (const field in newData.$set) {
-        if (columns.includes(field)) {
-          jsonObject[field] = newData.$set[field];
-        }
-      }
-    }
-    if (newData.$push) {
-      for (const field in newData.$push) {
-        if (columns.includes(field)) {
-          if (!jsonObject[field]) {
-            jsonObject[field] = [];
-          }
-          jsonObject[field].push(newData.$push[field]);
-        }
-      }
-    }
-    if (newData.$min) {
-      for (const field in newData.$min) {
-        if (columns.includes(field)) {
-          jsonObject[field] = Math.min(
-            jsonObject[field] || 0,
-            newData.$min[field]
-          );
-        }
-      }
-    }
-    if (newData.$max) {
-      for (const field in newData.$max) {
-        if (columns.includes(field)) {
-          jsonObject[field] = Math.max(
-            jsonObject[field] || 0,
-            newData.$max[field]
-          );
-        }
-      }
-    }
-    if (newData.$currentDate) {
-      for (const field in newData.$currentDate) {
-        if (
-          typeof newData.$currentDate[field] === "boolean" &&
-          newData.$currentDate[field]
-        ) {
-          jsonObject[field] = new Date().toISOString();
-        } else if (
-          newData.$currentDate[field] &&
-          (newData.$currentDate[field] as any).$type === "date"
-        ) {
-          jsonObject[field] = new Date().toISOString().slice(0, 10);
-        } else if (
-          newData.$currentDate[field] &&
-          (newData.$currentDate[field] as any).$type === "timestamp"
-        ) {
-          jsonObject[field] = new Date().toISOString();
-        }
-      }
     }
   }
 
