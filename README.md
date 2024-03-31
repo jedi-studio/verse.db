@@ -1,26 +1,26 @@
-# jsonVerse
+# verse.db
 
-jsonVerse is a lightweight JSON-based database package for Node.js. It provides a simple interface to store, retrieve, and manage data using JSON files.
+verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.
 
-[![Periodic testing of the JsonVerse](https://github.com/Marco5dev/jsonverse/actions/workflows/code-test.yml/badge.svg)](https://github.com/Marco5dev/jsonverse/actions/workflows/code-test.yml)
-[![Build](https://github.com/Marco5dev/jsonverse/actions/workflows/npm-publish.yml/badge.svg)](https://github.com/Marco5dev/jsonverse/actions/workflows/npm-publish.yml)
-[![NPM Version](https://img.shields.io/npm/v/jsonverse.svg)](https://www.npmjs.com/package/jsonverse)
-[![NPM Downloads](https://img.shields.io/npm/dt/jsonverse.svg)](https://www.npmjs.com/package/jsonverse)
-[![Github Repo Size](https://img.shields.io/github/repo-size/Marco5dev/jsonverse.svg)](https://github.com/Marco5dev/jsonverse)
-[![LICENSE](https://img.shields.io/npm/l/jsonverse.svg)](https://github.com/Marco5dev/jsonverse/blob/master/LICENSE)
-[![Contributors](https://img.shields.io/github/contributors/Marco5dev/jsonverse.svg)](https://github.com/Marco5dev/jsonverse/graphs/contributors)
-[![Commit](https://img.shields.io/github/last-commit/Marco5dev/jsonverse.svg)](https://github.com/Marco5dev/jsonverse/commits/master)
+[![Periodic testing of the Verse.db](https://github.com/Marco5dev/verse.db/actions/workflows/code-test.yml/badge.svg)](https://github.com/Marco5dev/verse.db/actions/workflows/code-test.yml)
+[![Build](https://github.com/Marco5dev/verse.db/actions/workflows/npm-publish.yml/badge.svg)](https://github.com/Marco5dev/verse.db/actions/workflows/npm-publish.yml)
+[![NPM Version](https://img.shields.io/npm/v/verse.db.svg)](https://www.npmjs.com/package/verse.db)
+[![NPM Downloads](https://img.shields.io/npm/dt/verse.db.svg)](https://www.npmjs.com/package/verse.db)
+[![Github Repo Size](https://img.shields.io/github/repo-size/Marco5dev/verse.db.svg)](https://github.com/Marco5dev/verse.db)
+[![LICENSE](https://img.shields.io/npm/l/verse.db.svg)](https://github.com/Marco5dev/verse.db/blob/master/LICENSE)
+[![Contributors](https://img.shields.io/github/contributors/Marco5dev/verse.db.svg)](https://github.com/Marco5dev/verse.db/graphs/contributors)
+[![Commit](https://img.shields.io/github/last-commit/Marco5dev/verse.db.svg)](https://github.com/Marco5dev/verse.db/commits/master)
 
 ## Introduction
 
-The jsonVerse package is a powerful utility designed to simplify the management of JSON data files within a designated folder. It offers methods for adding, editing, deleting, and retrieving data from JSON files. This wiki provides detailed examples and usage scenarios to help you effectively implement the jsonVerse package in your projects.
+The verse.db package is a powerful utility designed to simplify the management of data files within a designated folder. It offers methods for adding, editing, deleting, and retrieving data from JSON, YAML, SQL & more files. This wiki provides detailed examples and usage scenarios to help you effectively implement the verse.db package in your projects.
 
 ## Installation
 
-To begin using the jsonVerse package, you'll need to install it via npm. Open your terminal and run the following command:
+To begin using the verse.db package, you'll need to install it via npm. Open your terminal and run the following command:
 
 ```bash
-npm install jsonverse
+npm install verse.db
 yarn add verse.db
 ```
 
@@ -167,4 +167,4 @@ expect(result).toEqual({
 
 ## Conclusion
 
-The jsonVerse package simplifies the management of JSON data files within a specified folder. With the provided examples and usage instructions, you'll be able to efficiently integrate the jsonVerse package into your projects to streamline data operations.
+The verse.db package simplifies the management of JSON data files within a specified folder. With the provided examples and usage instructions, you'll be able to efficiently integrate the verse.db package into your projects to streamline data operations.
