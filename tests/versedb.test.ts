@@ -16,7 +16,7 @@ async function Setup(adapter: string): Promise<any> {
 }
 
 async function Teardown(db: string) {
-  await fs.rm(`./test/${db}`, { recursive: true, force: true });
+  await fs.rm(`./tests/${db}`, { recursive: true, force: true });
 }
 
 describe("JSON adapter testing all the methods", () => {
@@ -70,10 +70,20 @@ describe("JSON adapter testing all the methods", () => {
     await db.add("update/update", addData);
 
     const updateData = {
-      name: "Kmoshax",
+      $set: {
+        name: "Kmoshax",
+      },
     };
 
-    await db.update("update/update", { _id: "5678" }, updateData, true);
+    await db.update(
+      "update/update",
+      { _id: "5678" },
+      {
+        $set: {
+          name: "Kmoshax",
+        },
+      }
+    );
 
     const latestData = [
       {
@@ -416,7 +426,7 @@ describe("YAML adapter testing all the methods", () => {
       name: "Kmoshax",
     };
 
-    await db.update("update/update", { _id: "5678" }, updateData, true);
+    await db.update("update/update", { _id: "5678" });
 
     const latestData = [
       {
