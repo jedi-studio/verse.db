@@ -26,8 +26,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Run Tests
+      - name: Setup
         run: npm i
+
+      - name: Run Tests
         run: npm run test
 
   Build:
