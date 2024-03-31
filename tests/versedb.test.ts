@@ -1,6 +1,5 @@
-import { after } from "node:test";
 import versedb from "../src/index";
-import { promises as fs } from "fs";
+import fs from "fs";
 
 async function Setup(adapter: string): Promise<any> {
   const adapterOptions = {
@@ -16,7 +15,7 @@ async function Setup(adapter: string): Promise<any> {
 }
 
 async function Teardown(db: string) {
-  await fs.rm(`./tests/${db}`, { recursive: true, force: true });
+  await fs.promises.rm(`./tests/${db}`, { recursive: true, force: true });
 }
 
 describe("JSON adapter testing all the methods", () => {
@@ -32,347 +31,224 @@ describe("JSON adapter testing all the methods", () => {
     await Teardown("json");
   });
 
-  // Test 1: Adding new data
-  test("setup the database", async () => {
-    await Setup("json");
-    db = await Setup("json");
-  });
+  test("add method should add new data to the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
+    ];
+    const newData = [{ name: "Mike" }];
+    const dataname = "add";
 
-  // Test 2: Adding new data
-  test("add new data to a collection", async () => {
-    const newData = {
-      _id: "1234",
-      name: "Mark Maher",
-    };
+    // Act
+    const result = await db.add(dataname, newData);
 
-    await db.add("add/add", newData);
-
-    after(async () => {
-      await Teardown("json");
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Data added successfully.",
     });
-
-    const data = await db.load("add/add");
-    expect(data).toEqual([newData]);
   });
 
-  // Test 3: Updating data
-  test("update data in a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
+  test("load method should return the data from the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
     ];
-    await db.add("update/update", addData);
+    const dataname = "load";
 
-    const updateData = {
-      $set: {
-        name: "Kmoshax",
+    // Act
+    await db.add(dataname, data);
+    const result = await db.load(dataname);
+
+    // Assert
+    expect(result).toEqual(data);
+  });
+
+  test("remove method should remove data from the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
+    ];
+    const query = { _id: "1234" };
+    const dataname = "remove";
+
+    // Act
+    await db.add(dataname, data);
+    const result = await db.remove(dataname, query);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "1 document(s) removed successfully.",
+      results: null,
+    });
+  });
+
+  test("update method should update data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
+    ];
+    const updateQuery = { $set: { name: "Mike" } };
+    const dataname = "update";
+
+    // Act
+    await db.add(dataname, data);
+    const result = await db.update(dataname, { name: "John" }, updateQuery);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "1 document(s) updated successfully.",
+      results: {
+        _id: "1234",
+        name: "Mike",
       },
-    };
+    });
+  });
 
-    await db.update(
-      "update/update",
-      { _id: "5678" },
-      {
-        $set: {
-          name: "Kmoshax",
+  test("updateMany method should update data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
+    ];
+    const filter = { name: ["John", "Jane"] };
+    const updateQuery = { name: "Mike" };
+    const dataname = "updateMany";
+
+    // Act
+    await db.add(dataname, data);
+    const result = await db.updateMany(dataname, filter, updateQuery);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "1 document(s) updated successfully.",
+      results: [
+        {
+          _id: "1234",
+          name: "Mike",
         },
-      }
-    );
-
-    const latestData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Kmoshax",
-      },
-    ];
-
-    const data = await db.load("update/update");
-    expect(data).toEqual(latestData);
+      ],
+    });
   });
 
-  // Test 4: Removing data
-  test("remove data from a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
+  test("find method should return the data that matches the specified query", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
     ];
-    await db.add("update/update", addData);
-    await db.remove("update/update", { _id: "5678" });
+    const query = { name: "John" };
+    const dataname = "find";
 
-    const latestData = {
-      _id: "1234",
-      name: "Mark Maher",
+    // Act
+    await db.add(dataname, data);
+    const result = await db.find(dataname, query);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Found data matching your query.",
+      results: { _id: "1234", name: "John" },
+    });
+  });
+
+  test("loadAll method should return all the data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "Mark" },
+      { _id: "5678", name: "Anas" },
+      { _id: "1234", name: "Anas" },
+      { _id: "5678", name: "Mark" },
+    ];
+    const dataname = "loadAll";
+    const displayOptions = {
+      filters: {
+        name: "Mark",
+      },
+      sortBy: "name",
+      sortOrder: "asc",
+      page: 1,
+      pageSize: 10,
+      displayment: 10,
     };
 
-    const data = await db.load("update/update");
-    expect(data).toEqual([latestData]);
-  });
+    // Act
+    await db.add(dataname, data);
+    const result = await db.loadAll(dataname, displayOptions);
 
-  // Test 5: Finding data
-  test("find data in a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Anas",
-      },
-    ];
-    await db.add("find/find", addData);
-    await db.find("find/find", { _id: "5678" });
-
-    const foundData = [
-      {
-        _id: "5678",
-        name: "Anas",
-      },
-    ];
-
-    const data = await db.find("find/find", { _id: "5678" });
-    expect([data.results]).toEqual(foundData);
-  });
-
-  // Test 6: drop collection
-  test("drop a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-      {
-        _id: "9123",
-        name: "Mark Maher",
-      },
-      {
-        _id: "4567",
-        name: "Mark Maher",
-      },
-      {
-        _id: "8912",
-        name: "Mark Maher",
-      },
-      {
-        _id: "3456",
-        name: "Mark Maher",
-      },
-    ];
-    await db.add("drop/drop", addData);
-    await db.drop("drop/drop");
-
-    const data = await db.load("drop/drop");
-    expect(data).toEqual([]);
-  });
-
-  // Test 6: drop collection
-  test("search in multiple collections", async () => {
-    const addData1 = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "1234",
-        name: "Marco",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-    ];
-    const addData2 = [
-      {
-        _id: "1234",
-        name: "Anas",
-      },
-      {
-        _id: "5678",
-        name: "Anas",
-      },
-    ];
-    const addData3 = [
-      {
-        _id: "1234",
-        name: "kmoshax",
-      },
-      {
-        _id: "5678",
-        name: "kmoshax",
-      },
-    ];
-    await db.add("search/search1", addData1);
-    await db.add("search/search2", addData2);
-    await db.add("search/search3", addData3);
-
-    const collectionFilters = [
-      {
-        dataName: "search/search1",
-        displayment: null,
-        filter: {},
-      },
-      {
-        dataName: "search/search2",
-        displayment: null,
-        filter: {},
-      },
-      {
-        dataName: "search/search3",
-        displayment: null,
-        filter: {},
-      },
-    ];
-
-    const searchResults = await db.search(collectionFilters);
-
-    const resultData = {
-      "search/search1": [
-        { _id: "1234", name: "Mark Maher" },
-        { _id: "1234", name: "Marco" },
-        { _id: "5678", name: "Mark Maher" },
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Data found with the given options.",
+      results: [
+        { _id: "1234", name: "Mark" },
+        { _id: "5678", name: "Mark" },
       ],
-      "search/search2": [
-        { _id: "1234", name: "Anas" },
-        { _id: "5678", name: "Anas" },
-      ],
-      "search/search3": [
-        { _id: "1234", name: "kmoshax" },
-        { _id: "5678", name: "kmoshax" },
-      ],
-    };
-    expect(resultData).toEqual(searchResults);
+    });
   });
 
-  // Test 7: display multiple data collection
-  test("display multiple data collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-      {
-        _id: "9123",
-        name: "Mark Maher",
-      },
-      {
-        _id: "4567",
-        name: "Mark Maher",
-      },
-      {
-        _id: "8912",
-        name: "Mark Maher",
-      },
-      {
-        _id: "3456",
-        name: "Mark Maher",
-      },
+  test("drop method should delete all the data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
     ];
-    const addData2 = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "kmosha",
-      },
-      {
-        _id: "9123",
-        name: "kmosha",
-      },
-      {
-        _id: "4567",
-        name: "kmosha",
-      },
-      {
-        _id: "8912",
-        name: "kmosha",
-      },
-      {
-        _id: "3456",
-        name: "kmosha",
-      },
-    ];
-    await db.add("displayData/displayData", addData);
-    await db.add("displayData2/displayData2", addData2);
-    await db.allData(["displayData/displayData", "displayData2/displayData2"]);
+    const dataname = "drop";
 
-    const latest = [
+    // Act
+    await db.add(dataname, data);
+    const result = await db.drop(dataname);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "All data dropped successfully.",
+      results: null,
+    });
+  });
+
+  test("search method should return the data that matches the specified query", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "mark", author: "maher" },
+      { _id: "5678", name: "anas", author: "kmosha" },
+    ];
+    const data2 = [
+      { _id: "1234", name: "anas", author: "kmosha" },
+      { _id: "5678", name: "mark", author: "maher" },
+    ];
+    const query = [
       {
-        _id: "1234",
-        name: "Mark Maher",
+        dataname: "users",
+        filter: { name: "mark" },
+        displayment: 10,
       },
       {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-      {
-        _id: "9123",
-        name: "Mark Maher",
-      },
-      {
-        _id: "4567",
-        name: "Mark Maher",
-      },
-      {
-        _id: "8912",
-        name: "Mark Maher",
-      },
-      {
-        _id: "3456",
-        name: "Mark Maher",
-      },
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "kmosha",
-      },
-      {
-        _id: "9123",
-        name: "kmosha",
-      },
-      {
-        _id: "4567",
-        name: "kmosha",
-      },
-      {
-        _id: "8912",
-        name: "kmosha",
-      },
-      {
-        _id: "3456",
-        name: "kmosha",
+        dataname: "posts",
+        filter: { author: "maher" },
+        displayment: 5,
       },
     ];
+    const dataname = "users";
+    const dataname2 = "posts";
 
-    expect(latest).toEqual(latest);
+    // Act
+    await db.add(dataname, data);
+    await db.add(dataname2, data2);
+    const result = await db.search(query);
+
+    // Assert
+    expect(result).toEqual({
+      posts: [{ _id: "5678", author: "maher", name: "mark" }],
+      users: [{ _id: "1234", author: "maher", name: "mark" }],
+    });
   });
 });
 
@@ -389,332 +265,223 @@ describe("YAML adapter testing all the methods", () => {
     await Teardown("yaml");
   });
 
-  // Test 1: Adding new data
-  test("setup the database", async () => {
-    await Setup("yaml");
-    db = await Setup("yaml");
+  test("add method should add new data to the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
+    ];
+    const newData = [{ name: "Mike" }];
+    const dataname = "add";
+
+    // Act
+    const result = await db.add(dataname, newData);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Data added successfully.",
+    });
   });
 
-  // Test 2: Adding new data
-  test("add new data to a collection", async () => {
-    const newData = {
-      _id: "1234",
-      name: "Mark Maher",
-    };
+  test("load method should return the data from the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
+    ];
+    const dataname = "load";
 
-    await db.add("add/add", newData);
+    // Act
+    await db.add(dataname, data);
+    const result = await db.load(dataname);
 
-    const data = await db.load("add/add");
-    expect(data).toEqual([newData]);
+    // Assert
+    expect(result).toEqual(data);
   });
 
-  // Test 3: Updating data
-  test("update data in a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
+  test("remove method should remove data from the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
     ];
-    await db.add("update/update", addData);
+    const query = { _id: "1234" };
+    const dataname = "remove";
 
-    const updateData = {
-      name: "Kmoshax",
-    };
+    // Act
+    await db.add(dataname, data);
+    const result = await db.remove(dataname, query);
 
-    await db.update("update/update", { _id: "5678" });
-
-    const latestData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Kmoshax",
-      },
-    ];
-
-    const data = await db.load("update/update");
-    expect(data).toEqual(latestData);
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "1 document(s) removed successfully.",
+      results: null,
+    });
   });
 
-  // Test 4: Removing data
-  test("remove data from a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
+  test("update method should update data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
     ];
-    await db.add("update/update", addData);
-    await db.remove("update/update", { _id: "5678" });
+    const updateQuery = { $set: { name: "Mike" } };
+    const dataname = "update";
 
-    const latestData = {
-      _id: "1234",
-      name: "Mark Maher",
-    };
+    // Act
+    await db.add(dataname, data);
+    const result = await db.update(dataname, { name: "John" }, updateQuery);
 
-    const data = await db.load("update/update");
-    expect(data).toEqual([latestData]);
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "1 document(s) updated successfully.",
+      results: {
+        _id: "1234",
+        name: "Mike",
+      },
+    });
   });
 
-  // Test 5: Finding data
-  test("find data in a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Anas",
-      },
+  test("updateMany method should update data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
     ];
-    await db.add("find/find", addData);
-    await db.find("find/find", { _id: "5678" });
+    const filter = { name: ["John", "Jane"] };
+    const updateQuery = { name: "Mike" };
+    const dataname = "updateMany";
 
-    const foundData = [
-      {
-        _id: "5678",
-        name: "Anas",
-      },
-    ];
+    // Act
+    await db.add(dataname, data);
+    const result = await db.updateMany(dataname, filter, updateQuery);
 
-    const data = await db.find("find/find", { _id: "5678" });
-    expect([data.results]).toEqual(foundData);
-  });
-
-  // Test 6: drop collection
-  test("drop a collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-      {
-        _id: "9123",
-        name: "Mark Maher",
-      },
-      {
-        _id: "4567",
-        name: "Mark Maher",
-      },
-      {
-        _id: "8912",
-        name: "Mark Maher",
-      },
-      {
-        _id: "3456",
-        name: "Mark Maher",
-      },
-    ];
-    await db.add("drop/drop", addData);
-    await db.drop("drop/drop");
-
-    const data = await db.load("drop/drop");
-    expect(data).toEqual([]);
-  });
-
-  // Test 6: drop collection
-  test("search in multiple collections", async () => {
-    const addData1 = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "1234",
-        name: "Marco",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-    ];
-    const addData2 = [
-      {
-        _id: "1234",
-        name: "Anas",
-      },
-      {
-        _id: "5678",
-        name: "Anas",
-      },
-    ];
-    const addData3 = [
-      {
-        _id: "1234",
-        name: "kmoshax",
-      },
-      {
-        _id: "5678",
-        name: "kmoshax",
-      },
-    ];
-    await db.add("search/search1", addData1);
-    await db.add("search/search2", addData2);
-    await db.add("search/search3", addData3);
-
-    const collectionFilters = [
-      {
-        dataName: "search/search1",
-        displayment: null,
-        filter: {},
-      },
-      {
-        dataName: "search/search2",
-        displayment: null,
-        filter: {},
-      },
-      {
-        dataName: "search/search3",
-        displayment: null,
-        filter: {},
-      },
-    ];
-
-    const searchResults = await db.search(collectionFilters);
-
-    const resultData = {
-      "search/search1": [
-        { _id: "1234", name: "Mark Maher" },
-        { _id: "1234", name: "Marco" },
-        { _id: "5678", name: "Mark Maher" },
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "1 document(s) updated successfully.",
+      results: [
+        {
+          _id: "1234",
+          name: "Mike",
+        },
       ],
-      "search/search2": [
-        { _id: "1234", name: "Anas" },
-        { _id: "5678", name: "Anas" },
-      ],
-      "search/search3": [
-        { _id: "1234", name: "kmoshax" },
-        { _id: "5678", name: "kmoshax" },
-      ],
-    };
-    expect(resultData).toEqual(searchResults);
+    });
   });
 
-  // Test 7: display multiple data collection
-  test("display multiple data collection", async () => {
-    const addData = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-      {
-        _id: "9123",
-        name: "Mark Maher",
-      },
-      {
-        _id: "4567",
-        name: "Mark Maher",
-      },
-      {
-        _id: "8912",
-        name: "Mark Maher",
-      },
-      {
-        _id: "3456",
-        name: "Mark Maher",
-      },
+  test("find method should return the data that matches the specified query", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
     ];
-    const addData2 = [
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "kmosha",
-      },
-      {
-        _id: "9123",
-        name: "kmosha",
-      },
-      {
-        _id: "4567",
-        name: "kmosha",
-      },
-      {
-        _id: "8912",
-        name: "kmosha",
-      },
-      {
-        _id: "3456",
-        name: "kmosha",
-      },
-    ];
-    await db.add("displayData/displayData", addData);
-    await db.add("displayData2/displayData2", addData2);
-    await db.allData(["displayData/displayData", "displayData2/displayData2"]);
+    const query = { name: "John" };
+    const dataname = "find";
 
-    const latest = [
+    // Act
+    await db.add(dataname, data);
+    const result = await db.find(dataname, query);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Found data matching your query.",
+      results: { _id: "1234", name: "John" },
+    });
+  });
+
+  test("loadAll method should return all the data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "Mark" },
+      { _id: "5678", name: "Anas" },
+      { _id: "1234", name: "Anas" },
+      { _id: "5678", name: "Mark" },
+    ];
+    const dataname = "loadAll";
+    const displayOptions = {
+      filters: {
+        name: "Mark",
+      },
+      sortBy: "name",
+      sortOrder: "asc",
+      page: 1,
+      pageSize: 10,
+      displayment: 10,
+    };
+
+    // Act
+    await db.add(dataname, data);
+    const result = await db.loadAll(dataname, displayOptions);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Data found with the given options.",
+      results: [
+        { _id: "1234", name: "Mark" },
+        { _id: "5678", name: "Mark" },
+      ],
+    });
+  });
+
+  test("drop method should delete all the data in the specified file", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "John" },
+      { _id: "5678", name: "Jane" },
+    ];
+    const dataname = "drop";
+
+    // Act
+    await db.add(dataname, data);
+    const result = await db.drop(dataname);
+
+    // Assert
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "All data dropped successfully.",
+      results: null,
+    });
+  });
+
+  test("search method should return the data that matches the specified query", async () => {
+    // Arrange
+    const data = [
+      { _id: "1234", name: "mark", author: "maher" },
+      { _id: "5678", name: "anas", author: "kmosha" },
+    ];
+    const data2 = [
+      { _id: "1234", name: "anas", author: "kmosha" },
+      { _id: "5678", name: "mark", author: "maher" },
+    ];
+    const query = [
       {
-        _id: "1234",
-        name: "Mark Maher",
+        dataname: "users",
+        filter: { name: "mark" },
+        displayment: 10,
       },
       {
-        _id: "5678",
-        name: "Mark Maher",
-      },
-      {
-        _id: "9123",
-        name: "Mark Maher",
-      },
-      {
-        _id: "4567",
-        name: "Mark Maher",
-      },
-      {
-        _id: "8912",
-        name: "Mark Maher",
-      },
-      {
-        _id: "3456",
-        name: "Mark Maher",
-      },
-      {
-        _id: "1234",
-        name: "Mark Maher",
-      },
-      {
-        _id: "5678",
-        name: "kmosha",
-      },
-      {
-        _id: "9123",
-        name: "kmosha",
-      },
-      {
-        _id: "4567",
-        name: "kmosha",
-      },
-      {
-        _id: "8912",
-        name: "kmosha",
-      },
-      {
-        _id: "3456",
-        name: "kmosha",
+        dataname: "posts",
+        filter: { author: "maher" },
+        displayment: 5,
       },
     ];
+    const dataname = "users";
+    const dataname2 = "posts";
 
-    expect(latest).toEqual(latest);
+    // Act
+    await db.add(dataname, data);
+    await db.add(dataname2, data2);
+    const result = await db.search(query);
+
+    // Assert
+    expect(result).toEqual({
+      posts: [{ _id: "5678", author: "maher", name: "mark" }],
+      users: [{ _id: "1234", author: "maher", name: "mark" }],
+    });
   });
 });

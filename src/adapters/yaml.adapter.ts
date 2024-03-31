@@ -401,7 +401,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           results: null,
         };
       }
-
+  
       if (!updateQuery) {
         return {
           acknowledged: false,
@@ -409,16 +409,16 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           results: null,
         };
       }
-
+  
       const currentData: any[] = await this.load(dataname);
-
+  
       let updatedCount = 0;
       let updatedDocument: any = null;
       let matchFound = false;
-
+  
       currentData.some((item: any) => {
         let match = true;
-
+  
         for (const key of Object.keys(query)) {
           if (typeof query[key] === "object") {
             const operator = Object.keys(query[key])[0];
@@ -435,9 +435,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                 }
                 break;
               case "$or":
-                if (
-                  !query[key].some((condition: any) => item[key] === condition)
-                ) {
+                if (!query[key].some((condition: any) => item[key] === condition)) {
                   match = false;
                 }
                 break;
@@ -453,7 +451,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
             }
           }
         }
-
+  
         if (match) {
           for (const key of Object.keys(updateQuery)) {
             if (key.startsWith("$")) {
@@ -491,9 +489,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                 case "$pull":
                   for (const field of Object.keys(updateQuery.$pull)) {
                     if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => val !== updateQuery.$pull[field]
-                      );
+                      item[field] = item[field].filter((val: any) => val !== updateQuery.$pull[field]);
                     }
                   }
                   break;
@@ -507,18 +503,12 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                   break;
                 case "$max":
                   for (const field of Object.keys(updateQuery.$max)) {
-                    item[field] = Math.max(
-                      item[field] || Number.NEGATIVE_INFINITY,
-                      updateQuery.$max[field]
-                    );
+                    item[field] = Math.max(item[field] || Number.NEGATIVE_INFINITY, updateQuery.$max[field]);
                   }
                   break;
                 case "$min":
                   for (const field of Object.keys(updateQuery.$min)) {
-                    item[field] = Math.min(
-                      item[field] || Number.POSITIVE_INFINITY,
-                      updateQuery.$min[field]
-                    );
+                    item[field] = Math.min(item[field] || Number.POSITIVE_INFINITY, updateQuery.$min[field]);
                   }
                   break;
                 case "$lt":
@@ -581,9 +571,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                 case "$pullAll":
                   for (const field of Object.keys(updateQuery.$pullAll)) {
                     if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => !updateQuery.$pullAll[field].includes(val)
-                      );
+                      item[field] = item[field].filter((val: any) => !updateQuery.$pullAll[field].includes(val));
                     }
                   }
                   break;
@@ -605,39 +593,37 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                     item[field] = (item[field] || 0) * updateQuery.$mul[field];
                   }
                   break;
-                case "$each":
-                  if (updateQuery.$push) {
-                    for (const field of Object.keys(updateQuery.$push)) {
-                      const elementsToAdd = updateQuery.$push[field].$each;
-                      if (!item[field]) {
-                        item[field] = [];
+                  case "$each":
+                    if (updateQuery.$push) {
+                      for (const field of Object.keys(updateQuery.$push)) {
+                        const elementsToAdd = updateQuery.$push[field].$each;
+                        if (!item[field]) {
+                          item[field] = [];
+                        }
+                        if (Array.isArray(elementsToAdd)) {
+                          item[field].push(...elementsToAdd);
+                        }
                       }
-                      if (Array.isArray(elementsToAdd)) {
-                        item[field].push(...elementsToAdd);
+                    } else if (updateQuery.$addToSet) {
+                      for (const field of Object.keys(updateQuery.$addToSet)) {
+                        const elementsToAdd = updateQuery.$addToSet[field].$each;
+                        if (!item[field]) {
+                          item[field] = [];
+                        }
+                        if (Array.isArray(elementsToAdd)) {
+                          elementsToAdd.forEach((element: any) => {
+                            if (!item[field].includes(element)) {
+                              item[field].push(element);
+                            }
+                          });
+                        }
                       }
                     }
-                  } else if (updateQuery.$addToSet) {
-                    for (const field of Object.keys(updateQuery.$addToSet)) {
-                      const elementsToAdd = updateQuery.$addToSet[field].$each;
-                      if (!item[field]) {
-                        item[field] = [];
-                      }
-                      if (Array.isArray(elementsToAdd)) {
-                        elementsToAdd.forEach((element: any) => {
-                          if (!item[field].includes(element)) {
-                            item[field].push(element);
-                          }
-                        });
-                      }
-                    }
-                  }
-                  break;
+                    break;                  
                 case "$slice":
                   for (const field of Object.keys(updateQuery.$slice)) {
                     if (Array.isArray(item[field])) {
-                      item[field] = item[field].slice(
-                        updateQuery.$slice[field]
-                      );
+                      item[field] = item[field].slice(updateQuery.$slice[field]);
                     }
                   }
                   break;
@@ -648,29 +634,29 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                     }
                   }
                   break;
-                default:
-                  throw new Error(`Unsupported operator: ${key}`);
-              }
+                  default:
+                    throw new Error(`Unsupported operator: ${key}`); 
+                  }
             } else {
               item[key] = updateQuery[key];
             }
           }
-
+  
           updatedDocument = item;
           updatedCount++;
           matchFound = true;
-
+  
           return true;
         }
       });
-
+  
       if (!matchFound && upsert) {
         const newData = { ...query, ...updateQuery.$set };
         currentData.push(newData);
         updatedDocument = newData;
         updatedCount++;
       }
-
+  
       if (!matchFound && !upsert) {
         return {
           acknowledged: true,
@@ -678,16 +664,16 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           results: null,
         };
       }
-
+  
       fs.writeFileSync(dataname, yaml.stringify(currentData), "utf8");
-
+  
       logSuccess({
         content: "Data has been updated",
         devLogs: this.devLogs,
       });
-
+  
       this.emit("dataUpdated", updatedDocument);
-
+  
       return {
         acknowledged: true,
         message: `${updatedCount} document(s) updated successfully.`,
@@ -695,7 +681,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       };
     } catch (e: any) {
       this.emit("error", e.message);
-
+  
       return {
         acknowledged: false,
         errorMessage: `${e.message}`,
@@ -717,7 +703,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           results: null,
         };
       }
-
+  
       if (!updateQuery) {
         return {
           acknowledged: false,
@@ -725,15 +711,15 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           results: null,
         };
       }
-
+  
       const currentData: any[] = await this.load(dataname);
-
+  
       let updatedCount = 0;
       let updatedDocuments: any[] = [];
-
+  
       currentData.forEach((item: any) => {
         let match = true;
-
+  
         for (const key of Object.keys(query)) {
           if (typeof query[key] === "object") {
             const operator = Object.keys(query[key])[0];
@@ -750,9 +736,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                 }
                 break;
               case "$or":
-                if (
-                  !query[key].some((condition: any) => item[key] === condition)
-                ) {
+                if (!query[key].some((condition: any) => item[key] === condition)) {
                   match = false;
                 }
                 break;
@@ -768,7 +752,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
             }
           }
         }
-
+  
         if (match) {
           for (const key of Object.keys(updateQuery)) {
             if (key.startsWith("$")) {
@@ -806,9 +790,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                 case "$pull":
                   for (const field of Object.keys(updateQuery.$pull)) {
                     if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => val !== updateQuery.$pull[field]
-                      );
+                      item[field] = item[field].filter((val: any) => val !== updateQuery.$pull[field]);
                     }
                   }
                   break;
@@ -822,18 +804,12 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                   break;
                 case "$max":
                   for (const field of Object.keys(updateQuery.$max)) {
-                    item[field] = Math.max(
-                      item[field] || Number.NEGATIVE_INFINITY,
-                      updateQuery.$max[field]
-                    );
+                    item[field] = Math.max(item[field] || Number.NEGATIVE_INFINITY, updateQuery.$max[field]);
                   }
                   break;
                 case "$min":
                   for (const field of Object.keys(updateQuery.$min)) {
-                    item[field] = Math.min(
-                      item[field] || Number.POSITIVE_INFINITY,
-                      updateQuery.$min[field]
-                    );
+                    item[field] = Math.min(item[field] || Number.POSITIVE_INFINITY, updateQuery.$min[field]);
                   }
                   break;
                 case "$or":
@@ -882,9 +858,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                 case "$pullAll":
                   for (const field of Object.keys(updateQuery.$pullAll)) {
                     if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => !updateQuery.$pullAll[field].includes(val)
-                      );
+                      item[field] = item[field].filter((val: any) => !updateQuery.$pullAll[field].includes(val));
                     }
                   }
                   break;
@@ -936,9 +910,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
                 case "$slice":
                   for (const field of Object.keys(updateQuery.$slice)) {
                     if (Array.isArray(item[field])) {
-                      item[field] = item[field].slice(
-                        updateQuery.$slice[field]
-                      );
+                      item[field] = item[field].slice(updateQuery.$slice[field]);
                     }
                   }
                   break;
@@ -956,21 +928,21 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
               item[key] = updateQuery[key];
             }
           }
-
+  
           updatedDocuments.push(item);
           updatedCount++;
         }
       });
-
+  
       fs.writeFileSync(dataname, yaml.stringify(currentData), "utf8");
-
+  
       logSuccess({
         content: `${updatedCount} document(s) updated`,
         devLogs: this.devLogs,
       });
-
+  
       this.emit("dataUpdated", updatedDocuments);
-
+  
       return {
         acknowledged: true,
         message: `${updatedCount} document(s) updated successfully.`,
@@ -978,7 +950,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       };
     } catch (e: any) {
       this.emit("error", e.message);
-
+  
       return {
         acknowledged: false,
         errorMessage: `${e.message}`,

@@ -10,7 +10,6 @@ import {
   versedbAdapter,
   CollectionFilter,
   SearchResult,
-  operationKeys,
 } from "../types/adapter";
 import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 

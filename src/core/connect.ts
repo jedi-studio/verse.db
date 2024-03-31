@@ -552,6 +552,42 @@ export default class connect {
    * @param newData the new data that is going to be replaced with the old data
    * @returns updated data in multiple files or tables
    */
+  async updateMany(dataname: string, queries: any[], newData: operationKeys) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      !(this.adapter instanceof sqlAdapter) &&
+      typeof this.adapter?.updateMany === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.updateMany(
+        filePath,
+        queries,
+        newData
+      );
+    } else {
+      logError({
+        content: "Update Many operation only supports Json & Yaml adapters.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * a function to multi update operation (Note*: this is only supported for SQL adapter)
+   * @param dataname the data file name you want to update
+   * @param tableName the tables name
+   * @param queries the queries you want to search with
+   * @param newData the new data that is going to be replaced with the old data
+   * @returns updated data in multiple files or tables
+   */
   async multiUpdate(
     dataname: string,
     tableName: string,
