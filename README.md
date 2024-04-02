@@ -3,6 +3,7 @@
 verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.
 
 [![Periodic testing of the Verse.db](https://github.com/Marco5dev/verse.db/actions/workflows/code-test.yml/badge.svg)](https://github.com/Marco5dev/verse.db/actions/workflows/code-test.yml)
+[![Build](https://github.com/Marco5dev/verse.db/actions/workflows/npm-publish.yml/badge.svg)](https://github.com/Marco5dev/verse.db/actions/workflows/npm-publish.yml)
 [![NPM Version](https://img.shields.io/npm/v/verse.db.svg)](https://www.npmjs.com/package/verse.db)
 [![NPM Downloads](https://img.shields.io/npm/dt/verse.db.svg)](https://www.npmjs.com/package/verse.db)
 [![Github Repo Size](https://img.shields.io/github/repo-size/Marco5dev/verse.db.svg)](https://github.com/Marco5dev/verse.db)
@@ -21,46 +22,60 @@ To begin using the verse.db package, you'll need to install it via npm. Open you
 ```bash
 npm install verse.db
 yarn add verse.db
+pnpm add verse.db
+bun add verse.db
 ```
 
 ## Usage
 
 ### Import and Initialization
 
-to get started setup the database connection uding .connect method
+- to get started setup the database connection uding .connect method
+
+<details>
 
 ```javascript
-const versedb = require("verse.db");
+const versedb = require("verse.db"); // JS or CJS module 
 // or
-import versedb from "verse.db";
+import versedb from "verse.db"; // TS or ES module
 
 const adapterOptions = {
-  adapter: "json" | "yaml" | "sql", // the type of the adapter json, yaml or sql
-  dataPath: "./Data", // the path of the data folder
-  devLogs: { enable: true, path: "./Logs" }, // the path to the logs folder
-  encryption: { enable: false, secret: "" }, // Under Development: Encryption option (optional)
-  backup: { enable: false, path: "", retention: 0 }, // Under Development: Backing up (optionl)
+  adapter: "json" | "yaml" | "sql", // Type of the Database to use
+  dataPath: "./Data", // Path to the databse folder
+  devLogs: { enable: true, path: "./Logs" }, // Logs of database events
+  encryption: { enable: false, secret: "" }, // Under Maintenance
+  backup: { enable: false, path: "", retention: 0 }, // Under Maintenance
 };
 
 const db = new versedb.connect(adapterOptions); // use the connect method to connect a database
 ```
 
-Note\*: that you can make a multiple databases in the same time with/without the same extention
+</details>
+
+Note\*:  You can make a multiple database files in the same time with/without the same intializer
 
 ### Load a data file
 
-You can load any data file using .load method
+- You can load any data file using .load method
+
+<details>
+
 
 ```javascript
-const dataname = "data"; // the name of the datafile without the extention
+const dataname = "data"; // The name of the file of the database
 const result = await db.load(dataname);
 
 console.log(result);
 ```
 
+</details>
+
+
 ### Add Data
 
-To add data, use the .add method, for example:
+- To add data, use the .add method, for example:
+
+<details>
 
 ```javascript
 // Arrange
@@ -68,11 +83,12 @@ const data = [
   { _id: "1234", name: "John" },
   { _id: "5678", name: "Jane" },
 ];
-const dataname = "dataFileName";
+const dataname = "users";
 
 // Act
 const result = await db.add(dataname, data);
 ```
+
 
 result:
 
@@ -80,16 +96,18 @@ result:
 {
   "acknowledged": true,
   "message": "Data added successfully.",
-  "results": [
-    { "_id": "1234", "name": "John" },
-    { "_id": "5678", "name": "Jane" }
-  ]
 }
 ```
 
+</details>
+
+
 ### find data
 
-Find the data you want with the query you want using .find method:
+- Find the data you want with the query you want using .find method:
+
+<details>
+
 
 ```javascript
 // Arrange
@@ -98,7 +116,7 @@ const data = [
   { _id: "5678", name: "Jane" },
 ];
 const query = { name: "John" };
-const dataname = "dataFileName";
+const dataname = "users";
 
 // Act
 const result = await db.find(dataname, query);
@@ -111,9 +129,15 @@ expect(result).toEqual({
 });
 ```
 
+</details>
+
+
 ### Remove data
 
-Remove the data you want with the query you want using .remove method:
+- Remove the data you want with the query you want using .remove method:
+
+<details>
+
 
 ```javascript
 // Arrange
@@ -122,7 +146,7 @@ const data = [
   { _id: "5678", name: "Jane" },
 ];
 const query = { _id: "1234" };
-const dataname = "remove";
+const dataname = "users";
 
 // Act
 const result = await db.remove(dataname, query);
@@ -135,9 +159,15 @@ expect(result).toEqual({
 });
 ```
 
+</details>
+
+
 ### Update
 
-Update the data you want with the query you want using .update method:
+- Update the data you want with the query you want using .update method:
+
+<details>
+
 
 ```javascript
 // Arrange
@@ -146,7 +176,32 @@ const data = [
   { _id: "5678", name: "Jane" },
 ];
 const updateQuery = { $set: { name: "Mike" } };
-const dataname = "update";
+const dataname = "users";
+
+// Valid operation Kyes
+/*
+- $set: Modifies an existing field's value or adds a new field if it doesn't exist.
+- $unset: Deletes a particular field.
+- $inc: Increments the value of a field by a specified amount.
+- $currentDate: Sets the value of a field to the current date, either as a Date or a Timestamp.
+- $push: Adds an element to an array.
+- $pull: Removes all array elements that match a specified query.
+- $position: Modifies the $push operator to specify the position in the array to add elements.
+- $max: Updates the value of the field to the specified value if the specified value is greater than the current value.
+- $min: Updates the value of the field to the specified value if the specified value is less than the current value.
+- $or: Performs a logical OR operation on an array of two or more query expressions.
+- $addToSet: Adds elements to an array only if they do not already exist in the set.
+- $pushAll: Adds multiple values to an array.
+- $pop: Removes the first or last element of an array.
+- $pullAll: Removes all occurrences of specified values from an array.
+- $rename: Renames a field.
+- $bit: Performs bitwise AND, OR, and XOR updates of integer values.
+- $mul: Multiplies the value of a field by a specified amount.
+- $each: Modifies the $push and $addToSet operators to append multiple values to an array.
+- $slice: Limits the number of elements in an array that matches the query condition.
+- $sort: Orders the elements of an array.
+*/
+
 
 // Act
 const result = await db.update(dataname, { name: "John" }, updateQuery);
@@ -162,8 +217,14 @@ expect(result).toEqual({
 });
 ```
 
-###
+</details>
+
+## For Further Usages (Other Adapters And Functions)
+
+- Kindly Note: We provide here a very small sample for usage for JSON for further usage and information. Check out on our [website](https://versedb.jedi-studio.com)
+
+- For Support And Help: Visit us on our discord server. [Link](https://discord.gg/mDyXV9hzXw)
 
 ## Conclusion
 
-The verse.db package simplifies the management of JSON data files within a specified folder. With the provided examples and usage instructions, you'll be able to efficiently integrate the verse.db package into your projects to streamline data operations.
+Verse.db stands as a cutting-edge database management platform engineered to effortlessly handle JSON, YAML, and SQL data formats. While presently we don't provide server hosting for user data, rest assured, it's on our roadmap and will soon become a reality. Furthermore, we're dedicated to broadening our support for diverse data formats, ensuring we meet and exceed your evolving needs and expectations. Stay tuned for an even more feature-rich experience!
