@@ -2,14 +2,13 @@
 
 ## Supported Versions
 
-We are currently supporting the following versions of the `jsonverse` package:
+We are currently supporting the following versions of the `verse.db` package:
 
-- 1.0.0 to 1.3.3
-- 2.0.0 (now)
+- 1.0 (now)
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability within the `jsonverse` package, please send an email to marco5dev@outlook.com. All security vulnerabilities will be promptly addressed.
+If you discover a security vulnerability within the `verse.db` package, please send an email to marco5dev@outlook.com. All security vulnerabilities will be promptly addressed.
 
 Please do not open GitHub issues for security vulnerabilities.
 
@@ -29,4 +28,4 @@ npm update verse.db
 
 We take security seriously and conduct regular code reviews to identify and fix potential security vulnerabilities in our codebase. However, if you come across any security concerns or have suggestions, feel free to contact us.
 
-Thank you for using the `jsonverse` package. Your security is our priority.
+Thank you for using the `verse.db` package. Your security is our priority.

@@ -43,17 +43,24 @@ async function check() {
     .get("https://registry.npmjs.com/-/v1/search?text=verse.db")
     .then((response: any) => {
       const version = response.data.objects[0]?.package?.version;
-      if (version && getLibraryVersion("versedb") !== version) {
-        logWarning({
-          content:
-            "Please update versedb to the latest version (" + version + ").",
-          devLogs: {
-            enable: false,
-            path: "",
-          },
-        });
+      if (version) {
+        const currentVersion = getLibraryVersion("versedb");
+        if (currentVersion !== version && !isBetaOrPreview(version)) {
+          logWarning({
+            content:
+              "Please update versedb to the latest version (" + version + ").",
+            devLogs: {
+              enable: false,
+              path: "",
+            },
+          });
+        }
       }
     });
+}
+
+function isBetaOrPreview(version: string) {
+  return version.toLowerCase().includes("beta") || version.toLowerCase().includes("preview");
 }
 
 /**
