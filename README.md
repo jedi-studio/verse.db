@@ -3,7 +3,6 @@
 verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.
 
 [![Periodic testing of the Verse.db](https://github.com/Marco5dev/verse.db/actions/workflows/code-test.yml/badge.svg)](https://github.com/Marco5dev/verse.db/actions/workflows/code-test.yml)
-[![Build](https://github.com/Marco5dev/verse.db/actions/workflows/npm-publish.yml/badge.svg)](https://github.com/Marco5dev/verse.db/actions/workflows/npm-publish.yml)
 [![NPM Version](https://img.shields.io/npm/v/verse.db.svg)](https://www.npmjs.com/package/verse.db)
 [![NPM Downloads](https://img.shields.io/npm/dt/verse.db.svg)](https://www.npmjs.com/package/verse.db)
 [![Github Repo Size](https://img.shields.io/github/repo-size/Marco5dev/verse.db.svg)](https://github.com/Marco5dev/verse.db)
