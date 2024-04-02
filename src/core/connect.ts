@@ -63,8 +63,8 @@ export default class connect {
   public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null;
   public dataPath: string = "";
   public devLogs: DevLogsOptions = { enable: false, path: "" };
-  public encryption: EncryptionOptions = { enable: false, secret: "" };
-  public backup: BackupOptions = { enable: false, path: "", retention: 0 };
+  public encryption?: EncryptionOptions = { enable: false, secret: "" };
+  public backup?: BackupOptions = { enable: false, path: "", retention: 0 };
   public fileType: string = "";
 
   /**
@@ -110,8 +110,8 @@ export default class connect {
       fs.mkdirSync(this.devLogs.path, { recursive: true });
     }
 
-    if (this.backup.enable && !fs.existsSync(this.backup.path)) {
-      fs.mkdirSync(this.backup.path, { recursive: true });
+    if (this.backup?.enable && !fs.existsSync(this.backup?.path)) {
+      fs.mkdirSync(this.backup?.path, { recursive: true });
     }
   }
 

@@ -108,8 +108,8 @@ export interface AdapterOptions {
   adapterType?: string | null;
   dataPath: string;
   devLogs: DevLogsOptions;
-  encryption: EncryptionOptions;
-  backup: BackupOptions;
+  encryption?: EncryptionOptions;
+  backup?: BackupOptions;
 }
 
 export interface CollectionFilter {
