@@ -38,8 +38,8 @@ const adapterOptions = {
   adapter: "json" | "yaml" | "sql", // the type of the adapter json, yaml or sql
   dataPath: "./Data", // the path of the data folder
   devLogs: { enable: true, path: "./Logs" }, // the path to the logs folder
-  encryption: { enable: false, secret: "" }, // Under Development: Encryption option
-  backup: { enable: false, path: "", retention: 0 }, // Under Development: Backing up
+  encryption: { enable: false, secret: "" }, // Under Development: Encryption option (optional)
+  backup: { enable: false, path: "", retention: 0 }, // Under Development: Backing up (optionl)
 };
 
 const db = new versedb.connect(adapterOptions); // use the connect method to connect a database
