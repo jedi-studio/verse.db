@@ -37,7 +37,12 @@ export interface versedbAdapter {
   find(dataname: string, query: any): Promise<AdapterResults>;
   loadAll(dataname: string, displayOptions: DisplayOptions): Promise<AdapterResults>;
   remove(dataname: string, query: any, options?: any): Promise<AdapterResults>;
-  update(dataname: string, queries: any, newData: any, upsert: boolean): Promise<AdapterResults>;
+  update(
+    dataname: string,
+    query: any,
+    updateQuery: any,
+    upsert: boolean
+  ): Promise<AdapterResults>;
   updateMany(dataname: any, queries: any[any], newData: operationKeys,): Promise<AdapterResults>;
   drop(dataname: string): Promise<AdapterResults>;
 }

@@ -180,7 +180,7 @@ export default class connect {
 
     if (
       !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.add === "function"
+      typeof this.adapter?.find === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.find(filePath, query);
@@ -265,7 +265,12 @@ export default class connect {
    * @param upsert an upsert option
    * @returns returnts edited data
    */
-  async update(dataname: string, query: any, newData: any, upsert: boolean) {
+  async update(
+    dataname: string,
+    query: any,
+    updateQuery: any,
+    upsert: boolean = false
+  ) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -276,10 +281,10 @@ export default class connect {
 
     if (
       !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.add === "function"
+      typeof this.adapter?.update === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.update(filePath, query, newData, upsert);
+      return await this.adapter?.update(filePath, query, updateQuery, upsert);
     } else {
       logError({
         content: "Database not connected. Please call connect method first.",
