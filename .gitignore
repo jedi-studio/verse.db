@@ -133,4 +133,4 @@ dist
 .yarn/install-state.gz
 .pnp.*
 # Build files
-/dist
+/src
