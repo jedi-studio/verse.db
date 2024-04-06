@@ -58,6 +58,7 @@ async function check() {
       }
     });
 }
+check()
 
 function isBetaOrPreview(version: string) {
   return version.toLowerCase().includes("beta") || version.toLowerCase().includes("preview");
@@ -90,27 +91,29 @@ export default class connect {
           devLogs: { enable: this.devLogs.enable, path: this.devLogs.path },
         });
         this.fileType = "json";
+        check()
         break;
       case "yaml":
         this.adapter = new yamlAdapter({
           devLogs: { enable: this.devLogs.enable, path: this.devLogs.path },
         });
         this.fileType = "yaml";
+        check()
         break;
       case "sql":
         this.adapter = new sqlAdapter({
           devLogs: { enable: this.devLogs.enable, path: this.devLogs.path },
         });
         this.fileType = "sql";
+        check()
         break;
       default:
+        check()
         logError({
           content: "Invalid adapter type provided.",
           throwErr: true,
           devLogs: this.devLogs,
         });
-
-        check();
     }
 
     if (this.devLogs.enable && !fs.existsSync(this.devLogs.path)) {
