@@ -8,12 +8,12 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bugs": {
-    "url": "https://github.com/Marco5dev/verse.db/issues"
+    "url": "https://github.com/jedi-studio/verse.db/issues"
   },
   "homepage": "https://versedb.jedi-studio.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/marco5dev/verse.db.git"
+    "url": "git+https://github.com/jedi-studio/verse.db.git"
   },
   "files": [
     "dist",
