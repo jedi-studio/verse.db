@@ -66,6 +66,7 @@ export default class connect {
   public encryption: EncryptionOptions = { secret: "" };
   public backup: BackupOptions = { enable: false, path: "", retention: 0 };
   public fileType: string = "";
+  public adapterType: string = "";
   public key: string;
   /**
    * Sets up a database with one of the adapters
@@ -85,18 +86,21 @@ export default class connect {
           devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
         }, this.key);
         this.fileType = "verse";
+        this.adapterType = "json"
         break;
       case "yaml":
         this.adapter = new yamlAdapter({
           devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
         }, this.key);
         this.fileType = "verse";
+        this.adapterType = "yaml"
         break;
       case "sql":
         this.adapter = new sqlAdapter({
           devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
         }, this.key);
         this.fileType = "verse";
+        this.adapterType = "sql"
         break;
       default:
         logError({
@@ -335,14 +339,14 @@ export default class connect {
       !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.search === "function"
     ) {
-      if (!(this.fileType === "json") && !(this.fileType === "yaml")) {
+      if (!(this.adapterType === "json") && !(this.adapterType === "yaml")) {
         logError({
           content: "This option is only valid for json and yaml adapters.",
           devLogs: this.devLogs,
           throwErr: true,
         });
       }
-
+      
       const results = await this.adapter?.search(
         this.dataPath,
         collectionFilters

@@ -169,10 +169,10 @@ describe("JSON adapter testing all the methods", () => {
     ];
     const dataname = "loadAll";
     const displayOptions = {
-      filters: {
+      filter: {
         name: "Mark",
       },
-      sortBy: "name",
+      sortField: "name",
       sortOrder: "asc",
       page: 1,
       pageSize: 10,
@@ -187,10 +187,12 @@ describe("JSON adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "Data found with the given options.",
-      results: [
-        { _id: "1234", name: "Mark" },
-        { _id: "5678", name: "Mark" },
-      ],
+      results: {
+        allData: [
+          { _id: "1234", name: "Mark" },
+          { _id: "5678", name: "Mark" },
+        ],
+      },
     });
   });
 
@@ -210,7 +212,7 @@ describe("JSON adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "All data dropped successfully.",
-      results: null,
+      results: "",
     });
   });
 
@@ -224,16 +226,16 @@ describe("JSON adapter testing all the methods", () => {
       { _id: "1234", name: "anas", author: "kmosha" },
       { _id: "5678", name: "mark", author: "maher" },
     ];
-    const query = [
+    const collectionFilters = [
       {
         dataname: "users",
-        filter: { name: "mark" },
         displayment: 10,
+        filter: { name: "mark" },
       },
       {
         dataname: "posts",
-        filter: { author: "maher" },
         displayment: 5,
+        filter: { author: "maher" },
       },
     ];
     const dataname = "users";
@@ -242,7 +244,7 @@ describe("JSON adapter testing all the methods", () => {
     // Act
     await db.add(dataname, data);
     await db.add(dataname2, data2);
-    const result = await db.search(query);
+    const result = await db.search(collectionFilters);
 
     // Assert
     expect(result).toEqual({
@@ -403,10 +405,10 @@ describe("YAML adapter testing all the methods", () => {
     ];
     const dataname = "loadAll";
     const displayOptions = {
-      filters: {
+      filter: {
         name: "Mark",
       },
-      sortBy: "name",
+      sortField: "name",
       sortOrder: "asc",
       page: 1,
       pageSize: 10,
@@ -421,10 +423,12 @@ describe("YAML adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "Data found with the given options.",
-      results: [
-        { _id: "1234", name: "Mark" },
-        { _id: "5678", name: "Mark" },
-      ],
+      results: {
+        allData: [
+          { _id: "1234", name: "Mark" },
+          { _id: "5678", name: "Mark" },
+        ],
+      },
     });
   });
 
@@ -444,7 +448,7 @@ describe("YAML adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "All data dropped successfully.",
-      results: null,
+      results: "",
     });
   });
 
@@ -458,16 +462,16 @@ describe("YAML adapter testing all the methods", () => {
       { _id: "1234", name: "anas", author: "kmosha" },
       { _id: "5678", name: "mark", author: "maher" },
     ];
-    const query = [
+    const collectionFilters = [
       {
         dataname: "users",
-        filter: { name: "mark" },
         displayment: 10,
+        filter: { name: "mark" },
       },
       {
         dataname: "posts",
-        filter: { author: "maher" },
         displayment: 5,
+        filter: { author: "maher" },
       },
     ];
     const dataname = "users";
@@ -476,7 +480,7 @@ describe("YAML adapter testing all the methods", () => {
     // Act
     await db.add(dataname, data);
     await db.add(dataname2, data2);
-    const result = await db.search(query);
+    const result = await db.search(collectionFilters);
 
     // Assert
     expect(result).toEqual({

@@ -1113,7 +1113,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       const results: SearchResult = {};
       for (const filter of collectionFilters) {
         const { dataname, displayment, filter: query } = filter;
-        const filePath = path.join(dataPath, `${dataname}.versedb`);
+        const filePath = path.join(dataPath, `${dataname}.verse`);
   
         let encodedData;
         try {
@@ -1127,7 +1127,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
           continue; 
         }
 
-        let jsonData: object[] | null = decodeJSON(dataname, encodedData);
+        let jsonData: object[] | null = await decodeJSON(filePath, this.key);
 
         let result = jsonData || [];
 
