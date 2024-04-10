@@ -1,6 +1,6 @@
 {
   "name": "verse.db",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.",
   "license": "MIT",
   "author": "marco5dev (Mark Maher)",
@@ -8,12 +8,12 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bugs": {
-    "url": "https://github.com/Marco5dev/verse.db/issues"
+    "url": "https://github.com/jedi-studio/verse.db/issues"
   },
   "homepage": "https://versedb.jedi-studio.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/marco5dev/verse.db.git"
+    "url": "git+https://github.com/jedi-studio/verse.db.git"
   },
   "files": [
     "dist",
@@ -26,7 +26,7 @@
     "tsconfig.json"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsc",
     "test": "jest"
   },
   "devDependencies": {
@@ -42,7 +42,6 @@
   },
   "dependencies": {
     "axios": "^1.6.8",
-    "bson": "^6.6.0",
     "csv": "^6.3.8",
     "yaml": "^2.4.1"
   },
