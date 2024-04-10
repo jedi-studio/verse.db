@@ -10,20 +10,20 @@ import {
   versedbAdapter,
   CollectionFilter,
   SearchResult,
+  queryOptions,
 } from "../types/adapter";
-import yaml from "yaml";
-import { DevLogsOptions, AdapterSetting, queryOptions } from "../types/adapter";
+import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 import { decodeYAML, encodeYAML } from "../core/secureData";
+import yaml from "yaml";
 
 export class yamlAdapter extends EventEmitter implements versedbAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
   public key: string = "versedb";
-
+  
   constructor(options: AdapterSetting, key: string) {
     super();
     this.devLogs = options.devLogs;
-    this.key = key;
-    
+    this.key = key
     if (this.devLogs.enable && !this.devLogs.path) {
       logError({
         content: "You need to provide a logs path if devlogs is true.",
@@ -33,44 +33,63 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
-  async load(dataname: string): Promise<any> {
+  async load(dataname: string): Promise<any[]> {
     try {
-      let data: string | undefined;
-      try {
-        data = decodeYAML(dataname, this.key);
-        if (data === null) this.initFile({ dataname: dataname });
-      } catch (error: any) {
-        if (error.code === "ENOENT") {
-          logInfo({
-            content: "Data or file path to YAML is not found.",
-            devLogs: this.devLogs,
-          });
-          this.initFile({ dataname: dataname });
-        } else {
-          logError({
-            content: error,
-            devLogs: this.devLogs,
-            throwErr: true,
-          });
+        let data: any;
+        try {
+            data = decodeYAML(dataname, this.key);
+            if (data === null) {
+                this.initFile({ dataname: dataname });
+                data = [];
+            } else if (Array.isArray(data)) {
+                // Do nothing, data is already an array
+            } else if (typeof data === "object") {
+                // Convert object to array
+                data = [data];
+            } else {
+                throw new Error("Invalid data format");
+            }
+        } catch (error: any) {
+            if (error.code === "ENOENT") {
+                logInfo({
+                    content: "Data or file path to YAML is not found.",
+                    devLogs: this.devLogs,
+                });
+                this.initFile({ dataname: dataname });
+                data = [];
+            } else {
+                logError({
+                    content: error,
+                    devLogs: this.devLogs,
+                    throwErr: true,
+                });
+            }
         }
-      }
-      return data || undefined; 
+
+        return data;
     } catch (e: any) {
-      logError({
-        content: `Error loading data from /${dataname}: ${e}`,
-        devLogs: this.devLogs,
-      });
-      throw new Error(e);
+        logError({
+            content: `Error loading data from /${dataname}: ${e}`,
+            devLogs: this.devLogs,
+        });
+        throw new Error(e);
     }
-  }
-  
+}
+
   async add(
     dataname: string,
     newData: any,
-    options: AdapterOptions = {}
+    options: AdapterOptions = {},
   ): Promise<AdapterResults> {
     try {
-      let currentData: any[] = await this.load(dataname) || [];
+      let currentData: any = (await this.load(dataname)) || [];
+
+      if (typeof currentData === "undefined") {
+        return {
+          acknowledged: false,
+          errorMessage: `Error loading data.`,
+        };
+      }
 
       if (!newData || (Array.isArray(newData) && newData.length === 0)) {
         return {
@@ -90,6 +109,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           return [item];
         }
       });
+
 
       const duplicates = flattenedNewData.some((newItem: any) =>
         currentData.some((existingItem: any) =>
@@ -123,7 +143,6 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       currentData.push(
         ...flattenedNewData.map((item: any) => ({ _id: randomUUID(), ...item }))
       );
-
       const encodedData = encodeYAML(currentData, this.key);
 
       fs.writeFileSync(dataname, encodedData);
@@ -394,11 +413,12 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       };
     }
   }
-
+    
   async remove(
     dataname: string,
     query: any,
-    options?: { docCount: number }
+    options?: { docCount: number },
+    key?: string,
   ): Promise<AdapterResults> {
     try {
       if (!query) {
@@ -478,6 +498,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
     query: any,
     updateQuery: any,
     upsert: boolean = false
+    
   ): Promise<AdapterResults> {
     try {
       if (!query) {
@@ -1086,12 +1107,14 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       };
     }
   }
+
+
   async search(dataPath: string, collectionFilters: CollectionFilter[]): Promise<AdapterResults> {
     try {
       const results: SearchResult = {};
       for (const filter of collectionFilters) {
         const { dataname, displayment, filter: query } = filter;
-        const filePath = path.join(dataPath, `${dataname}.versedb`);
+        const filePath = path.join(dataPath, `${dataname}.verse`);
   
         let encodedData;
         try {
@@ -1105,16 +1128,16 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
           continue; 
         }
 
-        let jsonData: object[] | null = decodeYAML(dataname, encodedData);
+        let yamlData: object[] | null = await decodeYAML(filePath, this.key);
 
-        let result = jsonData || [];
+        let result = yamlData || [];
 
-        if (!jsonData) {
-          jsonData = []
+        if (!yamlData) {
+          yamlData = []
         }
 
         if (Object.keys(query).length !== 0) {
-          result = jsonData.filter((item: any) => {
+          result = yamlData.filter((item: any) => {
             for (const key in query) {
               if (item[key] !== query[key]) {
                 return false;
@@ -1153,13 +1176,13 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
   }
 
   public initFile({ dataname }: { dataname: string }): void {
-    const emptyData: any[] = [];
     const directory = path.dirname(dataname);
     if (!fs.existsSync(directory)) {
       fs.mkdirSync(directory, { recursive: true });
     }
 
     fs.writeFileSync(dataname, '', "utf8");
+
     logInfo({
       content: `Empty YAML file created at ${dataname}`,
       devLogs: this.devLogs,
