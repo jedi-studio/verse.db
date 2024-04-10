@@ -1,10 +1,26 @@
 export interface DisplayOptions {
   filters?: Record<string, any>;
   sortOrder?: "asc" | "desc";
-  page: number;
-  pageSize: number;
+  page?: number | undefined;
+  pageSize?: number | undefined;
   displayment?: number | null;
   groupBy?: string;
+}
+
+export interface queryOptions {
+  searchText?: string;
+  filter?: Record<string, any> | undefined;
+  fields?: any;
+  projection?: any;
+  sortOrder?: "asc" | "desc" | string;
+  sortField?: any;
+  distinct?: number;
+  dateRange?: any;
+  limitFields?: any
+  page?: number;
+  pageSize?: number;
+  displayment?: number | null | undefined | any;
+  groupBy?: any;
 }
 
 export interface AdapterUniqueKey {
@@ -35,14 +51,9 @@ export interface versedbAdapter {
   load(dataname: string): Promise<any[]>;
   add(dataname: string, newData: any, options?: AdapterOptions): Promise<AdapterResults>;
   find(dataname: string, query: any): Promise<AdapterResults>;
-  loadAll(dataname: string, displayOptions: DisplayOptions): Promise<AdapterResults>;
+  loadAll(dataname: string, displayOptions: queryOptions): Promise<AdapterResults>;
   remove(dataname: string, query: any, options?: any): Promise<AdapterResults>;
-  update(
-    dataname: string,
-    query: any,
-    updateQuery: any,
-    upsert: boolean
-  ): Promise<AdapterResults>;
+  update(dataname: string, queries: any, newData: any, upsert: boolean): Promise<AdapterResults>;
   updateMany(dataname: any, queries: any[any], newData: operationKeys,): Promise<AdapterResults>;
   drop(dataname: string): Promise<AdapterResults>;
 }
@@ -72,6 +83,7 @@ export interface DevLogsOptions {
 
 export interface AdapterSetting {
   devLogs: DevLogsOptions;
+  key?: string;
 }
 
 export interface CollectionFilter {

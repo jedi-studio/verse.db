@@ -43,25 +43,17 @@ async function check() {
     .get("https://registry.npmjs.com/-/v1/search?text=verse.db")
     .then((response: any) => {
       const version = response.data.objects[0]?.package?.version;
-      if (version) {
-        const currentVersion = getLibraryVersion("versedb");
-        if (currentVersion !== version && !isBetaOrPreview(version)) {
-          logWarning({
-            content:
-              "Please update versedb to the latest version (" + version + ").",
-            devLogs: {
-              enable: false,
-              path: "",
-            },
-          });
-        }
+      if (version && getLibraryVersion("versedb") !== version) {
+        logWarning({
+          content:
+            "Please update versedb to the latest version (" + version + ").",
+          devLogs: {
+            enable: false,
+            path: "",
+          },
+        });
       }
     });
-}
-check()
-
-function isBetaOrPreview(version: string) {
-  return version.toLowerCase().includes("beta") || version.toLowerCase().includes("preview");
 }
 
 /**
@@ -71,10 +63,10 @@ export default class connect {
   public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null;
   public dataPath: string = "";
   public devLogs: DevLogsOptions = { enable: false, path: "" };
-  public encryption?: EncryptionOptions = { enable: false, secret: "" };
-  public backup?: BackupOptions = { enable: false, path: "", retention: 0 };
+  public encryption: EncryptionOptions = { secret: "" };
+  public backup: BackupOptions = { enable: false, path: "", retention: 0 };
   public fileType: string = "";
-
+  public key: string;
   /**
    * Sets up a database with one of the adapters
    * @param {AdapterOptions} options - Options for setting up the adapter
@@ -83,45 +75,45 @@ export default class connect {
     this.dataPath = options.dataPath;
     this.devLogs = options.devLogs;
     this.encryption = options.encryption;
-    this.backup = options.backup;
-
+    this.key = options.encryption?.secret || 'versedb';
+    if (options.backup) {
+      this.backup = options.backup;
+    }
     switch (options.adapter) {
       case "json":
         this.adapter = new jsonAdapter({
-          devLogs: { enable: this.devLogs.enable, path: this.devLogs.path },
-        });
-        this.fileType = "json";
-        check()
+          devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
+        }, this.key);
+        this.fileType = "verse";
         break;
       case "yaml":
         this.adapter = new yamlAdapter({
-          devLogs: { enable: this.devLogs.enable, path: this.devLogs.path },
-        });
-        this.fileType = "yaml";
-        check()
+          devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
+        }, this.key);
+        this.fileType = "verse";
         break;
       case "sql":
         this.adapter = new sqlAdapter({
-          devLogs: { enable: this.devLogs.enable, path: this.devLogs.path },
-        });
-        this.fileType = "sql";
-        check()
+          devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
+        }, this.key);
+        this.fileType = "verse";
         break;
       default:
-        check()
         logError({
           content: "Invalid adapter type provided.",
           throwErr: true,
           devLogs: this.devLogs,
         });
+
+        check();
     }
 
-    if (this.devLogs.enable && !fs.existsSync(this.devLogs.path)) {
-      fs.mkdirSync(this.devLogs.path, { recursive: true });
+    if (this.devLogs && this.devLogs?.enable && !fs.existsSync(this.devLogs?.path)) {
+      fs.mkdirSync(this.devLogs?.path, { recursive: true });
     }
 
-    if (this.backup?.enable && !fs.existsSync(this.backup?.path)) {
-      fs.mkdirSync(this.backup?.path, { recursive: true });
+    if (this.backup && this.backup.enable && !fs.existsSync(this.backup?.path)) {
+      fs.mkdirSync(this.backup.path, { recursive: true });
     }
   }
 
@@ -140,6 +132,7 @@ export default class connect {
     }
 
     const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+    
     return await this.adapter?.load(filePath);
   }
 
@@ -190,7 +183,7 @@ export default class connect {
 
     if (
       !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.find === "function"
+      typeof this.adapter?.add === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.find(filePath, query);
@@ -275,12 +268,7 @@ export default class connect {
    * @param upsert an upsert option
    * @returns returnts edited data
    */
-  async update(
-    dataname: string,
-    query: any,
-    updateQuery: any,
-    upsert: boolean = false
-  ) {
+  async update(dataname: string, query: any, newData: any, upsert: boolean) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -291,10 +279,10 @@ export default class connect {
 
     if (
       !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.update === "function"
+      typeof this.adapter?.add === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.update(filePath, query, updateQuery, upsert);
+      return await this.adapter?.update(filePath, query, newData, upsert);
     } else {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -844,7 +832,7 @@ export default class connect {
    * @param keyToRemove the key to remove
    * @returns removed key
    */
-  async toJSON(dataname: string, tableName: string, keyToRemove: string) {
+  async toJSON(dataname: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -948,7 +936,7 @@ export default class connect {
         withFileTypes: true,
       });
       const fileStats = await Promise.all(
-        dataPathStats.map((stat) =>
+        dataPathStats.map((stat: any) =>
           stat.isFile()
             ? fs.promises.stat(path.resolve(dataPathFull, stat.name))
             : Promise.resolve(null)
@@ -990,7 +978,7 @@ export default class connect {
         message: "Loaded and detected database size",
         results: {
           files: filesMetadata,
-          totalSize: filesSize.reduce((total, size) => total + size, 0),
+          totalSize: filesSize.reduce((total: any, size: any) => total + size, 0),
         },
       };
     } catch (error: any) {

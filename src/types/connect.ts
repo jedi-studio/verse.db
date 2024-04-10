@@ -92,12 +92,11 @@ export interface DevLogsOptions {
 }
 
 export interface EncryptionOptions {
-  enable: boolean;
   secret: string;
 }
 
 export interface BackupOptions {
-  enable: boolean;
+  enable?: boolean;
   path: string;
   password?: string;
   retention: number;
@@ -108,7 +107,7 @@ export interface AdapterOptions {
   adapterType?: string | null;
   dataPath: string;
   devLogs: DevLogsOptions;
-  encryption?: EncryptionOptions;
+  encryption: EncryptionOptions;
   backup?: BackupOptions;
 }
 

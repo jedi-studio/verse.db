@@ -10,16 +10,19 @@ import {
   versedbAdapter,
   CollectionFilter,
   SearchResult,
+  queryOptions,
 } from "../types/adapter";
 import { DevLogsOptions, AdapterSetting } from "../types/adapter";
+import { decodeJSON, encodeJSON } from "../core/secureData";
 
 export class jsonAdapter extends EventEmitter implements versedbAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
-
-  constructor(options: AdapterSetting) {
+  public key: string = "versedb";
+  
+  constructor(options: AdapterSetting, key: string) {
     super();
     this.devLogs = options.devLogs;
-
+    this.key = key
     if (this.devLogs.enable && !this.devLogs.path) {
       logError({
         content: "You need to provide a logs path if devlogs is true.",
@@ -31,46 +34,54 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
 
   async load(dataname: string): Promise<any[]> {
     try {
-      let data: string | undefined;
-      try {
-        data = fs.readFileSync(dataname, "utf8");
-      } catch (error: any) {
-        if (error.code === "ENOENT") {
-          logInfo({
-            content: "Data or file path to JSON is not found.",
-            devLogs: this.devLogs,
-          });
-
-          this.initFile({ dataname: dataname });
-        } else {
-          logError({
-            content: error,
-            devLogs: this.devLogs,
-            throwErr: true,
-          });
+        let data: any;
+        try {
+            data = decodeJSON(dataname, this.key);
+            if (data === null) {
+                this.initFile({ dataname: dataname });
+                data = [];
+            } else if (Array.isArray(data)) {
+                // Do nothing, data is already an array
+            } else if (typeof data === "object") {
+                // Convert object to array
+                data = [data];
+            } else {
+                throw new Error("Invalid data format");
+            }
+        } catch (error: any) {
+            if (error.code === "ENOENT") {
+                logInfo({
+                    content: "Data or file path to JSON is not found.",
+                    devLogs: this.devLogs,
+                });
+                this.initFile({ dataname: dataname });
+                data = [];
+            } else {
+                logError({
+                    content: error,
+                    devLogs: this.devLogs,
+                    throwErr: true,
+                });
+            }
         }
-      }
-      if (!data) {
-        data = "[]";
-      }
-      return JSON.parse(data);
-    } catch (e: any) {
-      logError({
-        content: `Error loading data from /${dataname}: ${e}`,
-        devLogs: this.devLogs,
-      });
 
-      throw new Error(e);
+        return data;
+    } catch (e: any) {
+        logError({
+            content: `Error loading data from /${dataname}: ${e}`,
+            devLogs: this.devLogs,
+        });
+        throw new Error(e);
     }
-  }
+}
 
   async add(
     dataname: string,
     newData: any,
-    options: AdapterOptions = {}
+    options: AdapterOptions = {},
   ): Promise<AdapterResults> {
     try {
-      let currentData: any[] = (await this.load(dataname)) || [];
+      let currentData: any = (await this.load(dataname)) || [];
 
       if (typeof currentData === "undefined") {
         return {
@@ -97,6 +108,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
           return [item];
         }
       });
+
 
       const duplicates = flattenedNewData.some((newItem: any) =>
         currentData.some((existingItem: any) =>
@@ -130,8 +142,9 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       currentData.push(
         ...flattenedNewData.map((item: any) => ({ _id: randomUUID(), ...item }))
       );
+      const encodedData = encodeJSON(currentData, this.key);
 
-      fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
+      fs.writeFileSync(dataname, encodedData);
 
       logSuccess({
         content: "Data has been added",
@@ -240,25 +253,61 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
 
   async loadAll(
     dataname: string,
-    displayOptions: any
+    query: queryOptions
   ): Promise<AdapterResults> {
     try {
-      const currentData: any[] = await this.load(dataname);
 
-      if (!displayOptions || Object.keys(displayOptions).length === 0) {
-        return {
-          acknowledged: false,
-          results: null,
-          errorMessage: "You need to provide at least one option argument.",
-        };
+      const validOptions = [
+        'searchText',
+        'fields',
+        'filter',
+        'projection',
+        'sortOrder',
+        'sortField',
+        'groupBy',
+        'distinct',
+        'dateRange',
+        'limitFields',
+        'page',
+        'pageSize',
+        'displayment'
+      ];
+  
+      const invalidOptions = Object.keys(query).filter(key => !validOptions.includes(key));
+      if (invalidOptions.length > 0) {
+        throw new Error(`Invalid option(s) provided: ${invalidOptions.join(', ')}`);
       }
 
-      let filteredData = currentData;
+      const currentData: any[] = await this.load(dataname);
+  
+      let filteredData = [...currentData];
+  
+      if (query.searchText) {
+        const searchText = query.searchText.toLowerCase();
+        filteredData = filteredData.filter((item: any) =>
+          Object.values(item).some((value: any) =>
+            typeof value === 'string' && value.toLowerCase().includes(searchText)
+          )
+        );
+      }
+  
+      if (query.fields) {
+        const selectedFields = query.fields.split(',').map((field: string) => field.trim());
+        filteredData = filteredData.map((doc: any) => {
+          const selectedDoc: any = {};
+          selectedFields.forEach((field: string) => {
+            if (doc.hasOwnProperty(field)) {
+              selectedDoc[field] = doc[field];
+            }
+          });
+          return selectedDoc;
+        });
+      }
 
-      if (displayOptions.filters) {
-        filteredData = currentData.filter((item: any) => {
-          for (const key of Object.keys(displayOptions.filters)) {
-            if (item[key] !== displayOptions.filters[key]) {
+      if (query.filter && Object.keys(query.filter).length > 0) {
+        filteredData = filteredData.filter((item: any) => {
+          for (const key in query.filter) {
+            if (item[key] !== query.filter[key]) {
               return false;
             }
           }
@@ -266,42 +315,96 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         });
       }
 
-      if (displayOptions.sortBy && displayOptions.sortBy !== "any") {
+      if (query.projection) {
+        const projectionFields = Object.keys(query.projection);
+        filteredData = filteredData.map((doc: any) => {
+          const projectedDoc: any = {};
+          projectionFields.forEach((field: string) => {
+            if (query.projection[field]) {
+              projectedDoc[field] = doc[field];
+            } else {
+              delete projectedDoc[field];
+            }
+          });
+          return projectedDoc;
+        });
+      }
+  
+      if (query.sortOrder && (query.sortOrder === 'asc' || query.sortOrder === 'desc')) {
         filteredData.sort((a: any, b: any) => {
-          if (displayOptions.sortOrder === "asc") {
-            return a[displayOptions.sortBy] - b[displayOptions.sortBy];
+          if (query.sortOrder === 'asc') {
+            return a[query.sortField] - b[query.sortField];
           } else {
-            return b[displayOptions.sortBy] - a[displayOptions.sortBy];
+            return b[query.sortField] - a[query.sortField];
           }
         });
-      } else {
-        filteredData.sort((a: any, b: any) => a - b);
       }
-
-      const startIndex = (displayOptions.page - 1) * displayOptions.pageSize;
-      const endIndex = Math.min(
-        startIndex + displayOptions.pageSize,
-        filteredData.length
-      );
-      filteredData = filteredData.slice(startIndex, endIndex);
-
-      if (
-        displayOptions.displayment !== null &&
-        displayOptions.displayment > 0
-      ) {
-        filteredData = filteredData.slice(0, displayOptions.displayment);
+  
+      let groupedData: any = null;
+      if (query.groupBy) {
+        groupedData = {};
+        filteredData.forEach((item: any) => {
+          const key = item[query.groupBy];
+          if (!groupedData[key]) {
+            groupedData[key] = [];
+          }
+          groupedData[key].push(item);
+        });
       }
-
-      this.emit("allData", filteredData);
-
+  
+      if (query.distinct) {
+        const distinctField = query.distinct;
+        const distinctValues = [...new Set(filteredData.map((doc: any) => doc[distinctField]))];
+        return {
+          acknowledged: true,
+          message: "Distinct values retrieved successfully.",
+          results: distinctValues,
+        };
+      }
+  
+      if (query.dateRange) {
+        const { startDate, endDate, dateField } = query.dateRange;
+        filteredData = filteredData.filter((doc: any) => {
+          const docDate = new Date(doc[dateField]);
+          return docDate >= startDate && docDate <= endDate;
+        });
+      }
+  
+      if (query.limitFields) {
+        const limit = query.limitFields;
+        filteredData = filteredData.map((doc: any) => {
+          const limitedDoc: any = {};
+          Object.keys(doc).slice(0, limit).forEach((field: string) => {
+            limitedDoc[field] = doc[field];
+          });
+          return limitedDoc;
+        });
+      }
+  
+      if (query.page && query.pageSize) {
+        const startIndex = (query.page - 1) * query.pageSize;
+        filteredData = filteredData.slice(startIndex, startIndex + query.pageSize);
+      }
+  
+      if (query.displayment !== null && query.displayment > 0) {
+        filteredData = filteredData.slice(0, query.displayment);
+      }
+  
+      const results: any = { allData: filteredData };
+  
+      if (query.groupBy) {
+        results.groupedData = groupedData;
+      }
+  
+      this.emit("allData", results.allData);
+  
       return {
         acknowledged: true,
         message: "Data found with the given options.",
-        results: filteredData,
+        results: results,
       };
     } catch (e: any) {
       this.emit("error", e.message);
-
       return {
         acknowledged: false,
         errorMessage: `${e.message}`,
@@ -309,11 +412,12 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       };
     }
   }
-
+    
   async remove(
     dataname: string,
     query: any,
-    options?: { docCount: number }
+    options?: { docCount: number },
+    key?: string,
   ): Promise<AdapterResults> {
     try {
       if (!query) {
@@ -361,7 +465,9 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         };
       }
 
-      fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
+      const encodedData = encodeJSON(currentData, this.key);
+
+      fs.writeFileSync(dataname, encodedData);
 
       logSuccess({
         content: "Data has been removed",
@@ -391,6 +497,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
     query: any,
     updateQuery: any,
     upsert: boolean = false
+    
   ): Promise<AdapterResults> {
     try {
       if (!query) {
@@ -664,7 +771,9 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         };
       }
   
-      fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
+      const encodedData = encodeJSON(currentData, this.key);
+
+      fs.writeFileSync(dataname, encodedData);
   
       logSuccess({
         content: "Data has been updated",
@@ -933,7 +1042,9 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         }
       });
   
-      fs.writeFileSync(dataname, JSON.stringify(currentData), "utf8");
+      const encodedData = encodeJSON(currentData, this.key);
+
+      fs.writeFileSync(dataname, encodedData);
   
       logSuccess({
         content: `${updatedCount} document(s) updated`,
@@ -970,9 +1081,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
         };
       }
 
-      const emptyData: any[] = [];
-
-      fs.writeFileSync(dataname, JSON.stringify(emptyData), "utf8");
+      fs.writeFileSync(dataname, '');
 
       logSuccess({
         content: "Data has been dropped",
@@ -984,8 +1093,9 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       return {
         acknowledged: true,
         message: `All data dropped successfully.`,
-        results: null,
+        results: '',
       };
+
     } catch (e: any) {
       this.emit("error", e.message);
 
@@ -997,17 +1107,33 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
-  async search(dataPath: string, collectionFilters: CollectionFilter[]) {
+
+  async search(dataPath: string, collectionFilters: CollectionFilter[]): Promise<AdapterResults> {
     try {
       const results: SearchResult = {};
       for (const filter of collectionFilters) {
         const { dataname, displayment, filter: query } = filter;
-        const filePath = path.join(dataPath, `${dataname}.json`);
+        const filePath = path.join(dataPath, `${dataname}.versedb`);
+  
+        let encodedData;
+        try {
+          encodedData = await fs.promises.readFile(filePath, "utf-8");
+        } catch (e: any) {
+          logError({
+            content: `Error reading file ${filePath}: ${e.message}`,
+            devLogs: this.devLogs,
+            throwErr: false,
+          });
+          continue; 
+        }
 
-        const data = await fs.promises.readFile(filePath, "utf-8");
-        const jsonData = JSON.parse(data);
+        let jsonData: object[] | null = decodeJSON(dataname, encodedData);
 
-        let result = jsonData;
+        let result = jsonData || [];
+
+        if (!jsonData) {
+          jsonData = []
+        }
 
         if (Object.keys(query).length !== 0) {
           result = jsonData.filter((item: any) => {
@@ -1019,27 +1145,27 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
             return true;
           });
         }
-
+  
         if (displayment !== null) {
           result = result.slice(0, displayment);
         }
-
+  
         results[dataname] = result;
       }
-
+  
       return {
         acknowledged: true,
-        message: "Succefully searched in data for the given query.",
-        errorMessage: null,
+        message: "Successfully searched in data for the given query.",
         results: results,
       };
+
     } catch (e: any) {
       logError({
         content: e.message,
         devLogs: this.devLogs,
         throwErr: false,
       });
-
+  
       return {
         acknowledged: true,
         errorMessage: `${e.message}`,
@@ -1049,13 +1175,13 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
   }
 
   public initFile({ dataname }: { dataname: string }): void {
-    const emptyData: any[] = [];
     const directory = path.dirname(dataname);
     if (!fs.existsSync(directory)) {
       fs.mkdirSync(directory, { recursive: true });
     }
 
-    fs.writeFileSync(dataname, JSON.stringify(emptyData), "utf8");
+    fs.writeFileSync(dataname, '', "utf8");
+
     logInfo({
       content: `Empty JSON file created at ${dataname}`,
       devLogs: this.devLogs,

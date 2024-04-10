@@ -1,10 +1,11 @@
-# Security Policy
+ Security Policy
 
 ## Supported Versions
 
 We are currently supporting the following versions of the `verse.db` package:
 
-- 1.0 (now)
+- 1.0 ... 1.1
+- 1.1 (now)
 
 ## Reporting a Vulnerability
 

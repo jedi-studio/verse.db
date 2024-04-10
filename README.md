@@ -21,47 +21,42 @@ To begin using the verse.db package, you'll need to install it via npm. Open you
 ```bash
 npm install verse.db
 yarn add verse.db
-pnpm add verse.db
-bun add verse.db
 ```
 
 ## Usage
 
 ### Import and Initialization
 
-- to get started setup the database connection uding .connect method
-
-<details>
+to get started setup the database connection uding .connect method
 
 ```javascript
-const versedb = require("verse.db"); // JS or CJS module 
+const versedb = require("verse.db");
 // or
-import versedb from "verse.db"; // TS or ES module
+import versedb from "verse.db";
 
 const adapterOptions = {
-  adapter: "json" | "yaml" | "sql", // Type of the Database to use
-  dataPath: "./Data", // Path to the databse folder
-  devLogs: { enable: true, path: "./Logs" }, // Logs of database events
-  encryption: { enable: false, secret: "" }, // Under Maintenance
-  backup: { enable: false, path: "", retention: 0 }, // Under Maintenance
+  adapter: "json" | "yaml" | "sql", // the type of the adapter json, yaml or sql
+  dataPath: "./Data", // the path of the data folder
+  devLogs: { enable: true, path: "./Logs" }, // the path to the logs folder
+  encryption: { secret: "" }, // Add your secrete key for securing your data "Note: if you forgot your Key. It will be hard to get your data"
+  backup: { enable: false, path: "", retention: 0 }, // Under Development: Backing up
 };
 
 const db = new versedb.connect(adapterOptions); // use the connect method to connect a database
 ```
 
-</details>
+Note\*: that you can make a multiple databases in the same time with/without the same extention
 
-Note\*:  You can make a multiple database files in the same time with/without the same intializer
-
-### Load a data file
-
-- You can load any data file using .load method
+## JSON Database
 
 <details>
 
+- **To Load Data**
+
+<details>
 
 ```javascript
-const dataname = "data"; // The name of the file of the database
+const dataname = "users"; // the name of the datafile without the extention
 const result = await db.load(dataname);
 
 console.log(result);
@@ -70,11 +65,10 @@ console.log(result);
 </details>
 
 
-### Add Data
-
-- To add data, use the .add method, for example:
+- **To Add Data**
 
 <details>
+
 
 ```javascript
 // Arrange
@@ -88,25 +82,24 @@ const dataname = "users";
 const result = await db.add(dataname, data);
 ```
 
-
 result:
 
 ```json
 {
   "acknowledged": true,
   "message": "Data added successfully.",
+  "results": [
+    { "_id": "1234", "name": "John" },
+    { "_id": "5678", "name": "Jane" }
+  ]
 }
 ```
 
 </details>
 
-
-### find data
-
-- Find the data you want with the query you want using .find method:
+- **To Find Data**
 
 <details>
-
 
 ```javascript
 // Arrange
@@ -130,13 +123,9 @@ expect(result).toEqual({
 
 </details>
 
-
-### Remove data
-
-- Remove the data you want with the query you want using .remove method:
+- **To remove Data**
 
 <details>
-
 
 ```javascript
 // Arrange
@@ -148,7 +137,7 @@ const query = { _id: "1234" };
 const dataname = "users";
 
 // Act
-const result = await db.remove(dataname, query);
+const result = await db.remove(dataname, query, { docCount: 2 }); // (OPTIONAL) docCount => number of documents matchs the query
 
 // Assert
 expect(result).toEqual({
@@ -160,70 +149,184 @@ expect(result).toEqual({
 
 </details>
 
-
-### Update
-
-- Update the data you want with the query you want using .update method:
+- **To Update Data**
 
 <details>
 
+Update the data you want with the query you want using .update method:
 
 ```javascript
 // Arrange
-const data = [
-  { _id: "1234", name: "John" },
-  { _id: "5678", name: "Jane" },
-];
-const updateQuery = { $set: { name: "Mike" } };
 const dataname = "users";
-
-// Valid operation Kyes
-/*
-- $set: Modifies an existing field's value or adds a new field if it doesn't exist.
-- $unset: Deletes a particular field.
-- $inc: Increments the value of a field by a specified amount.
-- $currentDate: Sets the value of a field to the current date, either as a Date or a Timestamp.
-- $push: Adds an element to an array.
-- $pull: Removes all array elements that match a specified query.
-- $position: Modifies the $push operator to specify the position in the array to add elements.
-- $max: Updates the value of the field to the specified value if the specified value is greater than the current value.
-- $min: Updates the value of the field to the specified value if the specified value is less than the current value.
-- $or: Performs a logical OR operation on an array of two or more query expressions.
-- $addToSet: Adds elements to an array only if they do not already exist in the set.
-- $pushAll: Adds multiple values to an array.
-- $pop: Removes the first or last element of an array.
-- $pullAll: Removes all occurrences of specified values from an array.
-- $rename: Renames a field.
-- $bit: Performs bitwise AND, OR, and XOR updates of integer values.
-- $mul: Multiplies the value of a field by a specified amount.
-- $each: Modifies the $push and $addToSet operators to append multiple values to an array.
-- $slice: Limits the number of elements in an array that matches the query condition.
-- $sort: Orders the elements of an array.
-*/
-
+const data = [
+    { _id: "1234", name: "John", age: 30, hobbies: ["Reading"], friends: ["Jane"], email: "john@example.com" },
+    { _id: "5678", name: "Jane", age: 25, hobbies: ["Gardening"], friends: ["John"], email: "jane@example.com" },
+];
+const updateQuery = {
+    $set: { name: "Mike" }, // Set the name field to "Mike"
+    $inc: { age: 1 }, // Increment the age field by 1
+    $addToSet: { hobbies: "Swimming" }, // Add "Swimming" to the hobbies array if not already present
+    $push: { friends: "Alice" }, // Push "Alice" into the friends array
+    $unset: { email: "" }, // Remove the email field
+    $currentDate: { lastModified: true } // Set the lastModified field to the current date
+};
+const upsert =  true;`
 
 // Act
-const result = await db.update(dataname, { name: "John" }, updateQuery);
+const result = await db.update(dataname, { _id: "1234" }, updateQuery, upsert);
 
 // Assert
 expect(result).toEqual({
-  acknowledged: true,
-  message: "1 document(s) updated successfully.",
-  results: {
-    _id: "1234",
-    name: "Mike",
-  },
+    acknowledged: true,
+    message: "1 document(s) updated successfully.",
+    results: {
+        _id: "1234",
+        name: "Mike",
+        age: 31,
+        hobbies: ["Reading", "Swimming"],
+        friends: ["Jane", "Alice"],
+        lastModified: expect.any(Date)
+    },
 });
 ```
 
 </details>
 
-## For Further Usages (Other Adapters And Functions)
+- **To Update Many Data**
 
-- Kindly Note: We provide here a very small sample for usage for JSON for further usage and information. Check out on our [website](https://versedb.jedi-studio.com)
+<details>
 
-- For Support And Help: Visit us on our discord server. [Link](https://discord.gg/mDyXV9hzXw)
+```javascript
+// Arrange
+const dataname = "users";
+const query = { age: { $gte: 25 } }; // Find documents with age greater than or equal to 25
+const updateQuery = {
+    $set: { name: "Updated Name" }, // Set the name field to "Updated Name"
+    $inc: { age: 1 }, // Increment the age field by 1
+    $addToSet: { hobbies: "Swimming" }, // Add "Swimming" to the hobbies array if not already present
+    $push: { friends: "Alice" }, // Push "Alice" into the friends array
+    $unset: { email: "" }, // Remove the email field
+    $currentDate: { lastModified: true } // Set the lastModified field to the current date
+};
+
+// Act
+const result = await db.updateMany(dataname, query, updateQuery);
+
+// Results:
+      return {
+        acknowledged: true,
+        message: `${updatedCount} document(s) updated successfully.`,
+        results: updatedDocument,
+      };
+```
+
+</details>
+
+- **To Drop Data**
+
+<details>
+
+```javascript
+// Arrange
+const dataname = "users";
+const dropResult = await db.drop(dataname);
+
+// Results:
+     return {
+        acknowledged: true,
+        message: `All data dropped successfully.`,
+        results: '',
+      };
+```
+
+</details>
+
+- **To Search Multiples Of Data**
+
+<details>
+
+```javascript
+
+// Arrange
+const collectionFilters = [
+  {
+    dataname: "users",
+    displayment: 5,
+    filter: { age: 30, gender: "male" }, // Search for male users with age 30
+  },
+  {
+    dataname: "products",
+    displayment: null, // No limit on displayment
+    filter: { category: "electronics", price: { $lt: 500 } }, // Search for electronics products with price less than 500
+  },
+];
+
+// Perform the search
+const searchResult = await db.search("/path/to/data folder", collectionFilters);
+
+// Assert
+expect(searchResult.acknowledged).toBe(true);
+expect(searchResult.message).toBe("Successfully searched in data for the given query.");
+expect(searchResult.results).toEqual({
+  users: [
+    // Assert the first 5 male users with age 30
+    expect.objectContaining({ age: 30, gender: "male" }),
+    expect.objectContaining({ age: 30, gender: "male" }),
+    expect.objectContaining({ age: 30, gender: "male" }),
+    expect.objectContaining({ age: 30, gender: "male" }),
+    expect.objectContaining({ age: 30, gender: "male" }),
+  ],
+  products: [
+    // Assert the products that match the filter criteria
+    expect.objectContaining({ category: "electronics", price: expect.toBeLessThan(500) }),
+    // Add more assertions for other products if needed
+  ],
+});
+```
+
+</details>
+</details>
+
 
 ## Conclusion
 
-Verse.db stands as a cutting-edge database management platform engineered to effortlessly handle JSON, YAML, and SQL data formats. While presently we don't provide server hosting for user data, rest assured, it's on our roadmap and will soon become a reality. Furthermore, we're dedicated to broadening our support for diverse data formats, ensuring we meet and exceed your evolving needs and expectations. Stay tuned for an even more feature-rich experience!
+The verse.db package simplifies the management of JSON data files within a specified folder. With the provided examples and usage instructions, you'll be able to efficiently integrate the verse.db package into your projects to streamline data operations.
+Package Sidebar
+Install
+npm i verse.db
+
+Repository
+github.com/marco5dev/verse.db
+
+Homepage
+versedb.jedi-studio.com
+
+Weekly Downloads
+158
+
+Version
+1.1.4
+
+License
+MIT
+
+Unpacked Size
+448 kB
+
+Total Files
+70
+
+Issues
+0
+
+Pull Requests
+0
+
+Last publish
+2 hours ago
+
+Collaborators
+zenith-79
+marco5dev
+Try on RunKit
+Report malware

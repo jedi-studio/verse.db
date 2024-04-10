@@ -3,7 +3,7 @@
  * MIT Licensed
  */
 
-import { encrypt, decrypt } from "./core/encription";
+import { encodeJSON, decodeJSON, encodeYAML, decodeYAML, encodeSQL, decodeSQL } from "./core/secureData";
 import connect from "./core/connect";
 import { randomID, randomUUID } from "./lib/id";
 import { logError, logInfo, logSuccess, logWarning } from "./core/logger";
@@ -18,12 +18,16 @@ const logger = {
 
 const versedb = {
   connect,
-  encrypt,
-  decrypt,
+  encodeJSON,
+  decodeJSON,
+  encodeYAML,
+  decodeYAML,
+  encodeSQL,
+  decodeSQL,
   randomID,
   randomUUID,
   logger,
   Schema
 };
-export { connect, encrypt, decrypt, randomID, randomUUID, logger, Schema };
+export { connect, encodeJSON, decodeJSON, encodeYAML, decodeYAML, randomID, randomUUID, logger, Schema };
 export default versedb;
