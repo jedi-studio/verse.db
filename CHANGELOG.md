@@ -1,8 +1,19 @@
 # Verse.db
+
+### Change log:
+
+## Version 1.1
+
+- Securing Database.
+- No more `json`/`yaml`/`sql` file extension. Database became (`.verse`)
+
 ## Verseion 1.0
-### Changelog 
 
 - going from `jsonverse` to `VERSE.DB`
+- add `json` adapter
+- add `yaml` adapter
+- add `sql` adapter
+- now we are using `connect` to let you connect to the database
 
 # JSONVERSE
 ## Version 2.0.0
@@ -22,4 +33,4 @@
 
 - @Marco5dev
 - @kmoshax
-- @jedi.jsx
+- @ANAS

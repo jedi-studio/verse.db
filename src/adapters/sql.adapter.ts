@@ -9,13 +9,16 @@ import {
   DisplayOptions,
   MigrationParams,
 } from "../types/adapter";
+import { encodeSQL, decodeSQL, encodeJSON } from "../core/secureData";
 
 export class sqlAdapter extends EventEmitter implements SQLAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
+  public key: string = "versedb";
 
-  constructor(options: AdapterSetting) {
+  constructor(options: AdapterSetting, key: string) {
     super();
     this.devLogs = options.devLogs;
+    this.key = key;
 
     if (this.devLogs.enable && !this.devLogs.path) {
       logError({
@@ -33,18 +36,19 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       let fileContent: string = "";
       if (fs.existsSync(filePath)) {
         fileContent = await fs.promises.readFile(filePath, "utf-8");
+        fileContent = decodeSQL(fileContent, this.key)
       } else {
         const directoryPath = path.dirname(filePath);
         await fs.promises.mkdir(directoryPath, { recursive: true });
 
         await fs.promises.writeFile(filePath, "", "utf-8");
+
         return {
           acknowledged: true,
           message: `Created new SQL file '${dataname}'`,
           results: null,
         };
       }
-
       return {
         acknowledged: true,
         message: "Data loaded successfully.",
@@ -92,13 +96,18 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         };
       }
       const fileContent = fileContentResult.results;
-
+      
       const tableExists =
         fileContent && fileContent.includes(`CREATE TABLE ${tableName}`);
       if (!tableExists) {
+
+        if (tableDefinition.length === 0) throw new Error("Table definition cannot be an empty string");
+
         const createTableStatement = `CREATE TABLE ${tableName} (${tableDefinition});\n`;
         const updatedContent = fileContent + createTableStatement;
-        await fs.promises.writeFile(filePath, updatedContent, "utf-8");
+        const encodedData = encodeSQL(updatedContent, this.key);
+        fs.writeFileSync(dataname, encodedData);
+
         return {
           acknowledged: true,
           message: `Created table '${tableName}' in ${filePath}`,
@@ -143,8 +152,9 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           return `INSERT INTO ${tableName} VALUES (${values});`;
         });
         const updatedContent = fileContent + insertStatements.join("\n") + "\n";
-        await fs.promises.writeFile(filePath, updatedContent, "utf-8");
-        console.log(`Added data to table '${tableName}' in ${filePath}`);
+        const encodedData = encodeSQL(updatedContent, this.key);
+        fs.writeFileSync(dataname, encodedData);
+
         return {
           acknowledged: true,
           message: `Added data to table '${tableName}' in ${filePath}`,
@@ -277,7 +287,9 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         };
       }
 
-      await fs.promises.writeFile(filePath, fileContent, "utf-8");
+      const encodedData = encodeSQL(fileContent, this.key);
+      fs.writeFileSync(dataname, encodedData);
+
       return {
         acknowledged: true,
         message: `Removed data from table '${tableName}' in ${filePath}`,
@@ -297,8 +309,6 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     tableName: string,
     keyToRemove: string
   ): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
-
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -315,7 +325,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       );
       const schemaMatch = schemaRegex.exec(fileContent);
       if (!schemaMatch) {
-        throw new Error(`Table '${tableName}' not found in ${filePath}`);
+        throw new Error(`Table '${tableName}' not found in ${dataname}`);
       }
       const schema = schemaMatch[1];
       const columns = schema.split(",").map((col) => col.trim().split(" ")[0]);
@@ -338,17 +348,18 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         columnIndex
       );
 
-      await fs.promises.writeFile(filePath, fileContent, "utf-8");
+      const encodedData = encodeSQL(fileContent, this.key);
+      fs.writeFileSync(dataname, encodedData);
 
       return {
         acknowledged: true,
-        message: `Removed column '${keyToRemove}' from table '${tableName}' in ${filePath}`,
+        message: `Removed column '${keyToRemove}' from table '${tableName}' in ${dataname}`,
         results: fileContent,
       };
-    } catch (error) {
+    } catch (e: any) {
       return {
         acknowledged: false,
-        errorMessage: `Failed to remove column '${keyToRemove}' from table '${tableName}' in ${filePath}: ${error}`,
+        errorMessage: `Failed to remove column '${keyToRemove}' from table '${tableName}' in ${dataname}: ${e.message}`,
         results: null,
       };
     }
@@ -360,7 +371,17 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     query: any,
     newData: operationKeys
   ): Promise<AdapterResults> {
-    let data: string = fs.readFileSync(dataname, "utf8");
+
+    const fileContentResult = await this.load(dataname);
+    if (!fileContentResult.acknowledged) {
+      return {
+        acknowledged: false,
+        errorMessage: fileContentResult.errorMessage,
+        results: null,
+      };
+    }    
+
+    let data: string = fileContentResult.results;
     let lines: string[] = data.split("\n");
 
     let tableIndex: number = -1;
@@ -474,7 +495,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           newData.$currentDate[field] &&
           (newData.$currentDate[field] as any).$type === "date"
         ) {
-          const currentDate = new Date().toISOString().slice(0, 10); // Date only
+          const currentDate = new Date().toISOString().slice(0, 10);
           lines[rowIndex] = lines[rowIndex].replace(
             /, '.*?'/,
             `, '${currentDate}'`
@@ -483,7 +504,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           newData.$currentDate[field] &&
           (newData.$currentDate[field] as any).$type === "timestamp"
         ) {
-          const currentDate = new Date().toISOString(); // Full timestamp
+          const currentDate = new Date().toISOString();
           lines[rowIndex] = lines[rowIndex].replace(
             /, '.*?'/,
             `, '${currentDate}'`
@@ -492,7 +513,8 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       }
     }
 
-    fs.writeFileSync(dataname, lines.join("\n"));
+    const encodedData = encodeSQL(lines.join("\n"), this.key);
+    fs.writeFileSync(dataname, encodedData);
 
     return {
       acknowledged: true,
@@ -505,7 +527,6 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     dataname: string,
     displayOption: DisplayOptions
   ): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -526,14 +547,14 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       } else {
         return {
           acknowledged: true,
-          message: `No data found in ${filePath}.`,
+          message: `No data found in ${dataname}.`,
           results: [],
         };
       }
-    } catch (error) {
+    } catch (e: any) {
       return {
         acknowledged: false,
-        errorMessage: `Failed to retrieve all data from ${filePath}: ${error}`,
+        errorMessage: `Failed to retrieve all data from ${dataname}: ${e.message}`,
         results: null,
       };
     }
@@ -546,10 +567,20 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     newData: operationKeys
   ): Promise<AdapterResults> {
     try {
-      let data: string = fs.readFileSync(dataname, "utf8");
-      let lines: string[] = data.split("\n");
 
-      const tableIndex = this.findTableIndex(lines, tableName);
+    const fileContentResult = await this.load(dataname);
+    if (!fileContentResult.acknowledged) {
+      return {
+        acknowledged: false,
+        errorMessage: fileContentResult.errorMessage,
+        results: null,
+      };
+    }    
+    
+    let data: string = fileContentResult.results;
+    let lines: string[] = data.split("\n");
+
+    const tableIndex = this.findTableIndex(lines, tableName);
 
       if (tableIndex === -1) {
         return {
@@ -585,8 +616,10 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           }
         }
       }
+     
+     const encodedData = encodeSQL(lines.join("\n"), this.key);
 
-      fs.writeFileSync(dataname, lines.join("\n"));
+      fs.writeFileSync(dataname, encodedData);
 
       return {
         acknowledged: true,
@@ -603,7 +636,6 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
   }
 
   async drop(dataname: string, tableName?: string): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -617,42 +649,42 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
 
       if (!tableName) {
         fileContent = this.removeFullData(fileContent);
-        await fs.promises.writeFile(filePath, fileContent, "utf-8");
+        await fs.promises.writeFile(dataname, '', "utf-8");
         return {
           acknowledged: true,
-          message: `Dropped all tables from ${filePath}`,
-          results: `No more data found in ${filePath}`,
+          message: `Dropped all tables from ${dataname}`,
+          results: `No data in ${dataname}`,
         };
       } else {
         const removedContent = this.removeTable(fileContent, tableName);
         if (removedContent === fileContent) {
           return {
             acknowledged: false,
-            message: `Table '${tableName}' not found in ${filePath}`,
+            message: `Table '${tableName}' not found in ${dataname}`,
             results: null,
           };
         }
         fileContent = removedContent;
-        await fs.promises.writeFile(filePath, fileContent, "utf-8");
+        fileContent = encodeSQL(fileContent, this.key)
+        fs.writeFileSync(dataname, fileContent);
         return {
           acknowledged: true,
-          message: `Dropped table '${tableName}' from ${filePath}`,
+          message: `Dropped table '${tableName}' from ${dataname}`,
           results: `No more data found for ${tableName}.`,
         };
       }
-    } catch (error) {
+    } catch (e: any) {
       return {
         acknowledged: false,
         errorMessage: `Failed to drop table '${
           tableName || "all tables"
-        }' from ${filePath}: ${error}`,
+        }' from ${dataname}: ${e.message}`,
         results: null,
       };
     }
   }
 
   async countDoc(dataname: string, tableName: string): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -668,27 +700,26 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         const count = this.countDocuments(fileContent, tableName);
         return {
           acknowledged: true,
-          message: `Counted ${count} documents in table '${tableName}' from ${filePath}`,
+          message: `Counted ${count} documents in table '${tableName}' from ${dataname}`,
           results: count,
         };
       } else {
         return {
           acknowledged: false,
-          errorMessage: `Table '${tableName}' not found in ${filePath}`,
+          errorMessage: `Table '${tableName}' not found in ${dataname}`,
           results: null,
         };
       }
-    } catch (error) {
+    } catch (e: any) {
       return {
         acknowledged: false,
-        errorMessage: `Failed to count documents in table '${tableName}' from ${filePath}: ${error}`,
+        errorMessage: `Failed to count documents in table '${tableName}' from ${dataname}: ${e.message}`,
         results: null,
       };
     }
   }
 
   async countTable(dataname: string): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -702,29 +733,28 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       const count = this.countTables(fileContent);
       return {
         acknowledged: true,
-        message: `Counted ${count} tables in ${filePath}`,
+        message: `Counted ${count} tables in ${dataname}`,
         results: count,
       };
-    } catch (error) {
+    } catch (e: any) {
       return {
         acknowledged: false,
-        errorMessage: `Failed to count tables in ${filePath}: ${error}`,
+        errorMessage: `Failed to count tables in ${dataname}: ${e.message}`,
         results: null,
       };
     }
   }
 
   async dataSize(dataname: string): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
-      const stats = await fs.promises.stat(filePath);
+      const stats = await fs.promises.stat(dataname);
       const fileSizeInBytes = stats.size;
       const fileSizeInKilobytes = fileSizeInBytes / 1024;
       const fileSizeInMegabytes = fileSizeInKilobytes / 1024;
       const fileSizeInGigabytes = fileSizeInMegabytes / 1024;
       return {
         acknowledged: true,
-        message: `Obtained size of data in ${filePath}`,
+        message: `Obtained size of data in ${dataname}`,
         results: {
           bytes: fileSizeInBytes,
           kilobytes: fileSizeInKilobytes,
@@ -732,10 +762,10 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           gigabytes: fileSizeInGigabytes,
         },
       };
-    } catch (error) {
+    } catch (e: any) {
       return {
         acknowledged: false,
-        errorMessage: `Failed to obtain size of data in ${filePath}: ${error}`,
+        errorMessage: `Failed to obtain size of data in ${dataname}: ${e.message}`,
         results: null,
       };
     }
@@ -757,7 +787,16 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
 
     try {
-      const fileContent = await fs.promises.readFile(originalFilePath, "utf-8");
+      const fileContentResult = await this.load(originalFilePath);
+      
+      if (!fileContentResult.acknowledged) {
+        return {
+          acknowledged: false,
+          errorMessage: fileContentResult.errorMessage,
+          results: null,
+        };
+      }
+      const fileContent = fileContentResult.results;
 
       const { schema, tableData } = this.extractTable(fileContent, table);
 
@@ -779,43 +818,54 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
 
   async toJSON(from: string): Promise<AdapterResults> {
     try {
-      const sqlContent = await fs.promises.readFile(from, "utf-8");
+      const fileContentResult = await this.load(from);
+      if (!fileContentResult.acknowledged) {
+          return {
+              acknowledged: false,
+              errorMessage: fileContentResult.errorMessage,
+              results: null,
+          };
+      }
 
-      const jsonData = this.parseSQLToJson(sqlContent);
+      const fileContent = fileContentResult.results;
+      const jsonData = this.parseSQLToJson(fileContent);
 
       let outputFiles: string[] = [];
+      const inputDirectory = path.dirname(from);
+
       for (const tableName in jsonData) {
-        const outputFile = `${tableName.toLowerCase()}.json`;
-        const tableData = jsonData[tableName].data;
-        await fs.promises.writeFile(
-          outputFile,
-          JSON.stringify(tableData, null, 2),
-          "utf-8"
-        );
-        outputFiles.push(outputFile);
+          const outputFile = path.join(inputDirectory, `${tableName.toLowerCase()}.verse`);
+          const tableData = jsonData[tableName].data;
+          const jsonDataString = JSON.stringify(tableData, null, 2);
+
+          const encodedData = encodeJSON(jsonDataString, this.key);
+
+          await fs.promises.writeFile(outputFile, encodedData, "utf-8");
+          outputFiles.push(outputFile);
       }
 
       if (outputFiles.length > 0) {
-        return {
-          acknowledged: true,
-          message: `SQL data has been converted into JSON successfully.`,
-          results: `Check out each json file: ${outputFiles.join(", ")}`,
-        };
+          return {
+              acknowledged: true,
+              message: `SQL data has been converted into JSON successfully.`,
+              results: `Check out each json file: ${outputFiles.join(", ")}`,
+          };
       } else {
-        return {
-          acknowledged: false,
-          errorMessage: `No tables found in the SQL content.`,
-          results: null,
-        };
+          return {
+              acknowledged: false,
+              errorMessage: `No tables found in the SQL content.`,
+              results: null,
+          };
       }
     } catch (e: any) {
       return {
-        acknowledged: false,
-        errorMessage: `${e.message}`,
-        results: null,
+          acknowledged: false,
+          errorMessage: `${e.message}`,
+          results: null,
       };
     }
   }
+
 
   private tableExists(fileContent: string, tableName: string): boolean {
     const tableNameRegex = new RegExp(`CREATE TABLE ${tableName}\\s*\\(`, "i");
@@ -1011,17 +1061,20 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       });
     }
 
-    if (displayOption.page && displayOption.pageSize) {
+    if (
+      displayOption.page !== undefined &&
+      displayOption.pageSize !== undefined
+  ) {
       Object.keys(allData).forEach((tableName) => {
-        if (allData[tableName]) {
-          const startIndex = (displayOption.page - 1) * displayOption.pageSize;
-          const endIndex = startIndex + displayOption.pageSize;
-          let slicedData = allData[tableName].slice(startIndex, endIndex);
-
-          allData[tableName] = slicedData;
-        }
+          if (allData[tableName]) {
+              const startIndex = (displayOption.page! - 1) * displayOption.pageSize!;
+              const endIndex = startIndex + displayOption.pageSize!;
+              let slicedData = allData[tableName].slice(startIndex, endIndex);
+              allData[tableName] = slicedData;
+          }
       });
-    }
+  }
+  
 
     if (displayOption.sortOrder === "desc") {
       Object.keys(allData).forEach((tableName) => {
@@ -1125,7 +1178,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           newData.$currentDate[field] &&
           (newData.$currentDate[field] as any).$type === "date"
         ) {
-          const currentDate = new Date().toISOString().slice(0, 10); // Date only
+          const currentDate = new Date().toISOString().slice(0, 10);
           lines[rowIndex] = lines[rowIndex].replace(
             /, '.*?'/,
             `, '${currentDate}'`
@@ -1134,7 +1187,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
           newData.$currentDate[field] &&
           (newData.$currentDate[field] as any).$type === "timestamp"
         ) {
-          const currentDate = new Date().toISOString(); // Full timestamp
+          const currentDate = new Date().toISOString();
           lines[rowIndex] = lines[rowIndex].replace(
             /, '.*?'/,
             `, '${currentDate}'`
@@ -1158,12 +1211,12 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       throw new Error(`Table '${tableName}' not found in the file content.`);
     }
     const schema = match[1];
-    const columns = schema.split(",").map((col) => col.trim()); // Split columns
-    const columnNameRegex = /(\w+)\s+(\w+)(?:\s+(.+?))?(?:,|$)/g; // Regular expression to match column name
+    const columns = schema.split(",").map((col) => col.trim());
+    const columnNameRegex = /(\w+)\s+(\w+)(?:\s+(.+?))?(?:,|$)/g;
     const columnNames: string[] = [];
     let columnMatch;
     while ((columnMatch = columnNameRegex.exec(schema)) !== null) {
-      columnNames.push(columnMatch[1]); // Extract column name
+      columnNames.push(columnMatch[1]);
     }
 
     const removedColumnName = columnNames[columnIndex];
@@ -1182,7 +1235,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     let dataMatch;
     while ((dataMatch = dataRegex.exec(updatedContent)) !== null) {
       const rowData = dataMatch[1].split(",").map((value) => value.trim());
-      rowData.splice(columnIndex, 1); // Remove the value corresponding to the removed column
+      rowData.splice(columnIndex, 1);
       updatedDataContent = updatedDataContent.replace(
         dataMatch[1],
         rowData.join(", ")
