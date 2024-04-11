@@ -170,7 +170,7 @@ const updateQuery = {
     $unset: { email: "" }, // Remove the email field
     $currentDate: { lastModified: true } // Set the lastModified field to the current date
 };
-const upsert =  true;`
+const upsert =  true;
 
 // Act
 const result = await db.update(dataname, { _id: "1234" }, updateQuery, upsert);
