@@ -1,4 +1,4 @@
-![image](https://github.com/jedi-studio/verse.db/assets/100785809/269a554b-1157-4351-be16-f9c23c5ee1a2)
+![image](https://github.com/jedi-studio/verse.db/assets/100785809/269a554b-1157-4351-be16-f9c23c5ee1a2) 
 
 verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.
 
