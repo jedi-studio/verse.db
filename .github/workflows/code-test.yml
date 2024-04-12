@@ -1,4 +1,4 @@
-name: Testing of the Verse.db
+name: Testing of Verse.db
 
 on:
   push:
