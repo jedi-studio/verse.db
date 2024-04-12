@@ -757,7 +757,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       });
   
       if (!matchFound && upsert) {
-        const newData = { ...query, ...updateQuery.$set };
+        const newData = { _id: randomUUID(), ...query, ...updateQuery.$set };
         currentData.push(newData);
         updatedDocument = newData;
         updatedCount++;
