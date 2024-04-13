@@ -1,4 +1,4 @@
-name: Testing of Verse.db
+name: Testing of Verse.db (Production)
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 jobs:
   Testing:
     runs-on: ubuntu-latest
+    environment: Tests
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
