@@ -9,7 +9,7 @@ We are currently supporting the following versions of the `verse.db` package:
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability within the `verse.db` package, please send an email to marco5dev@outlook.com. All security vulnerabilities will be promptly addressed.
+If you discover a security vulnerability within the `verse.db` package, please send an email to support@jedi-studio.com. All security vulnerabilities will be promptly addressed.
 
 Please do not open GitHub issues for security vulnerabilities.
 
