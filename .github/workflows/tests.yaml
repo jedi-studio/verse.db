@@ -1,13 +1,12 @@
-name: Testing of Verse.db
+name: Testing of Verse.db (Production)
 
 on:
   push:
     branches:
       - master
 
-env:
-  # Define environment variable for Production
-  ENVIRONMENT: production  # You can change this value based on your actual environment
+environment:
+  name: Production
 
 jobs:
   Testing:
@@ -16,11 +15,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Use the environment variable in your steps
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ env.ENVIRONMENT == 'production' ? 20 : 16 }}  # Adjust versions if needed
+          node-version: 20
 
       - name: Install Dependencies
         run: npm i
