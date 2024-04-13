@@ -5,12 +5,10 @@ on:
     branches:
       - master
 
-environment:
-  name: Production
-
 jobs:
   Testing:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
