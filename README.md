@@ -3,7 +3,7 @@
 verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.
 
 [![Tests of Verse.db](https://github.com/jedi-studio/verse.db/actions/workflows/code-test.yml/badge.svg)](https://github.com/jedi-studio/verse.db/actions/workflows/code-test.yml)
-![Tests deployments](https://img.shields.io/github/deployments/jedi-studio/verse.db/Tests)
+[![Tests deployments](https://img.shields.io/github/deployments/jedi-studio/verse.db/Tests)](https://github.com/jedi-studio/verse.db/deployments/Tests)
 [![NPM Version](https://img.shields.io/npm/v/verse.db.svg)](https://www.npmjs.com/package/verse.db)
 [![NPM Downloads](https://img.shields.io/npm/dt/verse.db.svg)](https://www.npmjs.com/package/verse.db)
 [![Github Repo Size](https://img.shields.io/github/repo-size/jedi-studio/verse.db.svg)](https://github.com/jedi-studio/verse.db)
