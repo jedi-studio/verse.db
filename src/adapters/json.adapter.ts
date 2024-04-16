@@ -1174,6 +1174,245 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
     }
   }
 
+  public async nearbyVectors(dataName: string, point: { latitude: number, longitude: number }, radius: number, visitedVectors = new Set()): Promise<AdapterResults> {
+    const nearbyVectors = [];
+    const currentData = await this.load(dataName);
+
+    for (const vector of currentData) {
+        if (visitedVectors.has(vector)) {
+            continue;
+        }
+        visitedVectors.add(vector);
+
+        switch (vector.type) {
+            case 'point':
+                if (this.calculateDistance(point, vector.coordinates) <= radius) {
+                    nearbyVectors.push(vector);
+                }
+                break;
+            case 'line':
+                if (this.isPointOnLine(point, vector.start, vector.end)) {
+                    nearbyVectors.push(vector);
+                }
+                break;
+            case 'polygon':
+                if (this.isPointInsidePolygon(point, vector.coordinates)) {
+                    nearbyVectors.push(vector);
+                }
+                break;
+            case 'multiPoint':
+                for (const pointCoord of vector.coordinates) {
+                    if (this.calculateDistance(point, pointCoord) <= radius) {
+                        nearbyVectors.push(vector);
+                        break;
+                    }
+                }
+                break;
+            case 'multiLineString':
+                for (const line of vector.coordinates) {
+                    if (this.isPointOnLine(point, line.start, line.end)) {
+                        nearbyVectors.push(vector);
+                        break;
+                    }
+                }
+                break;
+            case 'multiPolygon':
+                for (const polygon of vector.coordinates) {
+                    if (this.isPointInsidePolygon(point, polygon)) {
+                        nearbyVectors.push(vector);
+                        break;
+                    }
+                }
+                break;
+            case 'geometryCollection':
+                for (const geometry of vector.geometries) {
+                    const { results } = await this.nearbyVectors(dataName, geometry, radius, visitedVectors);
+                    nearbyVectors.push(...results);
+                }
+                      break;
+            default:
+                return {
+                  acknowledged: true,
+                  message: `Invalid vector type: ${vector.type}`,
+                  results: null
+                };
+        }
+    }
+
+    return {
+      acknowledged: true,
+      message: "Successfully found vectors results.",
+      results: nearbyVectors
+    };
+}
+
+public calculateDistance(point1: any, point2: any) {
+    const earthRadius = 6371;
+
+    const lat1 = this.degToRad(point1.latitude);
+    const lon1 = this.degToRad(point1.longitude);
+    const lat2 = this.degToRad(point2.latitude);
+    const lon2 = this.degToRad(point2.longitude);
+
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
+
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1) * Math.cos(lat2) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return earthRadius * c;
+}
+
+public degToRad(degrees: number): number {
+    return degrees * (Math.PI / 180);
+}
+
+public isPointOnLine(point: any, lineStart: any, lineEnd: any) {
+    const minX = Math.min(lineStart.latitude, lineEnd.latitude);
+    const maxX = Math.max(lineStart.latitude, lineEnd.latitude);
+    const minY = Math.min(lineStart.longitude, lineEnd.longitude);
+    const maxY = Math.max(lineStart.longitude, lineEnd.longitude);
+
+    if (
+        point.latitude >= minX && point.latitude <= maxX &&
+        point.longitude >= minY && point.longitude <= maxY
+    ) {
+        if (lineStart.latitude === lineEnd.latitude) {
+            return Math.abs(point.latitude - lineStart.latitude) < Number.EPSILON;
+        } else {
+            const slope = (lineEnd.longitude - lineStart.longitude) / (lineEnd.latitude - lineStart.latitude);
+            const yOnLine = lineStart.longitude + slope * (point.latitude - lineStart.latitude);
+            return Math.abs(point.longitude - yOnLine) < Number.EPSILON;
+        }
+    }
+
+    return false;
+}
+
+public isPointInsidePolygon(point: any, polygonCoordinates: any) {
+    let isInside = false;
+
+    for (let i = 0, j = polygonCoordinates.length - 1; i < polygonCoordinates.length; j = i++) {
+        const xi = polygonCoordinates[i].latitude;
+        const yi = polygonCoordinates[i].longitude;
+        const xj = polygonCoordinates[j].latitude;
+        const yj = polygonCoordinates[j].longitude;
+
+        const intersect =
+            ((yi > point.longitude) !== (yj > point.longitude)) &&
+            (point.latitude < ((xj - xi) * (point.longitude - yi) / (yj - yi) + xi));
+
+        if (intersect) {
+            isInside = !isInside;
+        }
+    }
+
+    return isInside;
+}
+
+public async calculatePolygonArea(polygonCoordinates: any): Promise<AdapterResults> {
+  try {
+      let area = 0;
+
+      if (polygonCoordinates.length < 3) {
+          return {
+              acknowledged: false,
+              message: "Invalid polygon: Insufficient coordinates.",
+              results: null
+          };
+      }
+
+      for (let i = 0; i < polygonCoordinates.length; i++) {
+          const j = (i + 1) % polygonCoordinates.length;
+          const xi = polygonCoordinates[i].latitude;
+          const yi = polygonCoordinates[i].longitude;
+          const xj = polygonCoordinates[j].latitude;
+          const yj = polygonCoordinates[j].longitude;
+          area += (xi * yj - xj * yi);
+      }
+
+      area = Math.abs(area / 2);
+
+      return {
+          acknowledged: true,
+          message: "Successfully calculated area.",
+          results: area
+      };
+  } catch (error) {
+      return {
+          acknowledged: false,
+          message: `Error calculating polygon area: ${error}`,
+          results: null
+      };
+  }
+}
+
+public async bufferZone(geometry: any, bufferDistance: any): Promise<AdapterResults> {
+  try {
+      const bufferedGeometry = [];
+
+      switch (geometry.type) {
+          case 'point':
+              const bufferedPoint = {
+                  latitude: geometry.coordinates.latitude + bufferDistance,
+                  longitude: geometry.coordinates.longitude + bufferDistance
+              };
+              bufferedGeometry.push(bufferedPoint);
+              break;
+          case 'line':
+              const bufferedLine = {
+                  start: {
+                      latitude: geometry.start.latitude + bufferDistance,
+                      longitude: geometry.start.longitude + bufferDistance
+                  },
+                  end: {
+                      latitude: geometry.end.latitude + bufferDistance,
+                      longitude: geometry.end.longitude + bufferDistance
+                  }
+              };
+              bufferedGeometry.push(bufferedLine);
+              break;
+          case 'polygon':
+          case 'multiPoint':
+          case 'multiLineString':
+          case 'multiPolygon':
+              for (const feature of geometry.coordinates) {
+                  const bufferedFeature = [];
+                  for (const vertex of feature) {
+                      const bufferedVertex = {
+                          latitude: vertex.latitude + bufferDistance,
+                          longitude: vertex.longitude + bufferDistance
+                      };
+                      bufferedFeature.push(bufferedVertex);
+                  }
+                  bufferedGeometry.push(bufferedFeature);
+              }
+              break;
+          default:
+              return {
+                  acknowledged: false,
+                  message: `Invalid geometry type: ${geometry.type}`,
+                  results: null
+              };
+      }
+
+      return {
+          acknowledged: true,
+          message: "Successfully buffered geometry.",
+          results: bufferedGeometry
+      };
+  } catch (error) {
+      return {
+          acknowledged: false,
+          message: `Error buffering geometry: ${error}`,
+          results: null
+      };
+  }
+ }
+
   public initFile({ dataname }: { dataname: string }): void {
     const directory = path.dirname(dataname);
     if (!fs.existsSync(directory)) {
