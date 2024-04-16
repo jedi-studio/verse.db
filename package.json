@@ -1,6 +1,6 @@
 {
   "name": "verse.db",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "description": "verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.",
   "license": "MIT",
   "author": "marco5dev (Mark Maher)",
@@ -19,16 +19,18 @@
     "dist",
     ".gitignore",
     "CHANGELOG.md",
-    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
     "LICENSE",
     "package.json",
     "README.md",
-    "tsconfig.json"
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsc",
     "test": "jest"
   },
+  "funding": "https://github.com/sponsors/jedi-studio",
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
     "@types/jest": "^29.5.12",

@@ -6,7 +6,6 @@ import { DevLogsOptions } from "../types/connect";
 type logsPath = string;
 type LogFile = string;
 
-
 /**
  * @param content the content to log it in a file and the console the both in the same time
  */
@@ -76,7 +75,7 @@ export function logError({
         `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
       );
     } else {
-      console.log(
+      console.error(
         `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
       );
     }
@@ -86,7 +85,7 @@ export function logError({
         `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
       );
     } else {
-      console.log(
+      console.error(
         `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
       );
     }

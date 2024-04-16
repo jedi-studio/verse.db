@@ -1,4 +1,4 @@
-export default {
+const colors = {
   reset: "\x1b[0m",
   bright: "\x1b[1m",
   dim: "\x1b[2m",
@@ -27,3 +27,5 @@ export default {
     white: "\x1b[47m",
   },
 };
+
+export default colors;

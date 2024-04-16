@@ -134,3 +134,4 @@ dist
 .pnp.*
 # Build files
 /dist
+package-lock.json
