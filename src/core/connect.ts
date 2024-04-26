@@ -103,6 +103,11 @@ export default class connect {
     return await this.adapter?.load(filePath);
   }
 
+  /**
+   *  Watch a data file for realtime database
+   * @param {string} dataname - The name of the data file
+   * @returns {Promise<any[]>} - A Promise that resolves with the loaded data and watch it
+   */
   async watch(dataname: string): Promise<any> {
     const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
     return new Promise((resolve, reject) => {
@@ -216,6 +221,11 @@ export default class connect {
     }
   }
 
+  /**
+   * 
+   * @param {any[]} operations - array of objects that contains the operations you want
+   * @returns 
+   */
   async batchTasks(operations: any[]) {
     if (!this.adapter) {
       logError({
