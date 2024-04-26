@@ -21,7 +21,24 @@ To begin using the verse.db package, you'll need to install it via npm. Open you
 
 ```bash
 npm install verse.db
+#or
 yarn add verse.db
+#or
+bun add verse.db
+#or
+pnpm add verse.db
+```
+
+- **You Can also use:**
+
+```bash
+npm create verse.db@latest
+#or
+yarn create verse.db@latest
+#or
+bun create verse.db@latest
+#or
+pnpm create verse.db@latest
 ```
 
 ## Usage
@@ -39,7 +56,7 @@ const adapterOptions = {
   adapter: "json" | "yaml" | "sql", // the type of the adapter json, yaml or sql
   dataPath: "./Data", // the path of the data folder
   devLogs: { enable: true, path: "./Logs" }, // the path to the logs folder
-  encryption: { secret: "" }, // Add your secrete key for securing your data "Note: if you forgot your Key. It will be hard to get your data"
+  secure: { enable: false, secret: "" }, // Add your secrete key for securing your data "Note: if you forgot your Key. It will be hard to get your data"
   backup: { enable: false, path: "", retention: 0 }, // Under Development: Backing up
 };
 
@@ -60,23 +77,26 @@ Note\*: that you can make a multiple databases in the same time with/without the
 const dataname = "users"; // the name of the datafile without the extention
 const result = await db.load(dataname);
 
-console.log(result);
+console.log(result.results);
 ```
 
 </details>
-
 
 - **To Add Data**
 
 <details>
 
+- To inser single/many data will depend on the goven data. If dat is array then it will add each object as single document, but if data given as object then it will add it as single document.
 
 ```javascript
 // Arrange
+
 const data = [
   { _id: "1234", name: "John" },
   { _id: "5678", name: "Jane" },
-];
+  { _id: "5678", name: "Jane" },
+  { _id: "5678", name: "Jane" },
+]; // Adding Multiple of documents
 const dataname = "users";
 
 // Act

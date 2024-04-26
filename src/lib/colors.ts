@@ -15,6 +15,8 @@ const colors = {
     magenta: "\x1b[35m",
     cyan: "\x1b[36m",
     white: "\x1b[37m",
+    gray: "\x1b[90m",
+    offWhite: "\x1b[37;2;28;28;28m"
   },
   bg: {
     black: "\x1b[40m",

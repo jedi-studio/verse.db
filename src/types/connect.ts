@@ -1,5 +1,3 @@
-import connect from "../core/connect";
-
 export interface JSONAdapter {
   load(dataname: string): Promise<any[]>;
   add(dataname: string, newData: any, options?: any): Promise<void>;
@@ -7,15 +5,35 @@ export interface JSONAdapter {
   loadAll(dataname: string, displayOptions?: any): Promise<void>;
   remove(dataname: string, query: any, options?: any): Promise<void>;
   update(dataname: string, query: any, newData: any): Promise<void>;
+  updateMany(dataname: any, queries: any[any], newData: operationKeys,): Promise<void>;
   drop(dataname: string): Promise<void>;
+  nearbyVectors(data: nearbyOptions): Promise<void>
+  polygonArea(polygonCoordinates: any): Promise<void>;
+  bufferZone(geometry: any, bufferDistance: any): Promise<void>;
   search(collectionFilters: CollectionFilter[]): Promise<SearchResult>;
-  countDoc({
-    dataname,
-    query,
-  }: {
-    dataname: string;
-    query?: { [key: string]: string };
-  }): Promise<any>;
+  countDoc(dataname: string): Promise<any>;
+  dataSize(dataname: string): Promise<any>;
+  batchTasks(operation: any[]): Promise<any>;
+  moveData(from: string, to: string, options: { query?: any, dropSource?: boolean }): Promise<any>;
+  model(dataname: string, schema: any): any;
+}
+export interface YAMLAdapter {
+  load(dataname: string): Promise<any[]>;
+  add(dataname: string, newData: any, options?: any): Promise<void>;
+  find(dataname: string, query: any, options?: any): Promise<any[]>;
+  loadAll(dataname: string, displayOptions?: any): Promise<void>;
+  remove(dataname: string, query: any, options?: any): Promise<void>;
+  update(dataname: string, query: any, newData: any): Promise<void>;
+  updateMany(dataname: any, queries: any[any], newData: operationKeys,): Promise<void>;
+  drop(dataname: string): Promise<void>;
+  nearbyVectors(data: nearbyOptions): Promise<void>
+  polygonArea(polygonCoordinates: any): Promise<void>;
+  bufferZone(geometry: any, bufferDistance: any): Promise<void>;
+  search(collectionFilters: CollectionFilter[]): Promise<SearchResult>;
+  countDoc(dataname: string): Promise<any>;
+  dataSize(dataname: string): Promise<any>;
+  batchTasks(operation: any[]): Promise<any>;
+  moveData(from: string, to: string, options: { query?: any, dropSource?: boolean }): Promise<any>;
   model(dataname: string, schema: any): any;
 }
 export interface SQLAdapter {
@@ -57,33 +75,14 @@ export interface SQLAdapter {
     valueToRemove: string
   ): Promise<void>;
   toJSON(from: string): Promise<void>;
-  countDoc({
+  tableCount({
     dataname,
     query,
   }: {
     dataname: string;
     query?: { [key: string]: string };
   }): Promise<any>;
-  
-}
-
-export interface YAMLAdapter {
-  load(dataname: string): Promise<any[]>;
-  add(dataname: string, newData: any, options?: any): Promise<void>;
-  find(dataname: string, query: any, options?: any): Promise<any[]>;
-  loadAll(dataname: string, displayOptions?: any): Promise<void>;
-  remove(dataname: string, query: any, options?: any): Promise<void>;
-  update(dataname: string, query: any, newData: any): Promise<void>;
-  drop(dataname: string): Promise<void>;
-  search(collectionFilters: CollectionFilter[]): Promise<SearchResult>;
-  countDoc({
-    dataname,
-    query,
-  }: {
-    dataname: string;
-    query?: { [key: string]: string };
-  }): Promise<any>;
-  model(dataname: string, schema: any): any;
+  join(dataname: string, searchOptions: { table: string; query: string }[], displayOptions?: searchFilters): Promise<void>
 }
 
 export interface DevLogsOptions {
@@ -91,7 +90,8 @@ export interface DevLogsOptions {
   path: string;
 }
 
-export interface EncryptionOptions {
+export interface SecureSystem {
+  enable: boolean;
   secret: string;
 }
 
@@ -107,7 +107,7 @@ export interface AdapterOptions {
   adapterType?: string | null;
   dataPath: string;
   devLogs: DevLogsOptions;
-  encryption: EncryptionOptions;
+  secure: SecureSystem;
   backup?: BackupOptions;
 }
 
@@ -143,4 +143,21 @@ export interface operationKeys {
   $max?: { [key: string]: any };
   $currentDate?: { [key: string]: boolean | { $type: "date" | "timestamp" } };
   upsert?: boolean;
+}
+
+export interface nearbyOptions {
+  dataName: string;
+  point: {
+      latitude: number;
+      longitude: number;
+  };
+  radius: number;
+  visitedVectors?: Set<any>;
+}
+export interface searchFilters {
+  groupBy?: { column: string };
+  page?: number;
+  pageSize?: number;
+  sortOrder?: 'asc' | 'desc';
+  displayment?: number | null;
 }

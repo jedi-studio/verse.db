@@ -136,11 +136,11 @@ export function logWarning({
       logsPath: devLogs.path,
       logFile: "warning.log",
     });
-    console.log(
+    console.warn(
       `${colors.bright}${colors.fg.yellow}[Warning]:${colors.reset} ${content}`
     );
   } else {
-    console.log(
+    console.warn(
       `${colors.bright}${colors.fg.yellow}[Warning]:${colors.reset} ${content}`
     );
   }
@@ -163,11 +163,11 @@ export function logInfo({
       logsPath: devLogs.path,
       logFile: "info.log",
     });
-    console.log(
+    console.info(
       `${colors.bright}${colors.fg.blue}[Info]:${colors.reset} ${content}`
     );
   } else {
-    console.log(
+    console.info(
       `${colors.bright}${colors.fg.blue}[Info]:${colors.reset} ${content}`
     );
   }

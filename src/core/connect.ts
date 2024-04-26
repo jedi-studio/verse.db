@@ -3,68 +3,26 @@ import path from "path";
 import {
   AdapterOptions,
   BackupOptions,
+  SecureSystem,
   DevLogsOptions,
-  EncryptionOptions,
   CollectionFilter,
   DisplayOptions,
   operationKeys,
 } from "../types/connect";
-import { AdapterResults } from "../types/adapter";
+import { searchFilters, nearbyOptions } from "../types/adapter";
 import Schema from "./schema";
 import { jsonAdapter, yamlAdapter, sqlAdapter } from "../adapters/export";
-import { logError, logWarning } from "./logger";
-import axios from "axios";
-
-const packageJsonPath = path.resolve(process.cwd(), "package.json");
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
-
-/**
- * Gets the version of a library
- * @param {any} library - The library to get the version of
- * @returns {string} - The version of the library
- */
-const getLibraryVersion = (library: any) => {
-  const dependencies = packageJson.dependencies || {};
-  const devDependencies = packageJson.devDependencies || {};
-  const version =
-    (dependencies[library] || devDependencies[library] || "").replace(
-      /^(\^|~)/,
-      ""
-    ) || "Not installed";
-  return version;
-};
-
-/**
- * Checks for updates for the versedb library
- * @returns {Promise<void>} - Resolves when the check is complete
- */
-async function check() {
-  return await axios
-    .get("https://registry.npmjs.com/-/v1/search?text=verse.db")
-    .then((response: any) => {
-      const version = response.data.objects[0]?.package?.version;
-      if (version && getLibraryVersion("versedb") !== version) {
-        logWarning({
-          content:
-            "Please update versedb to the latest version (" + version + ").",
-          devLogs: {
-            enable: false,
-            path: "",
-          },
-        });
-      }
-    });
-}
+import { logError } from "./logger";
 
 /**
  * The main connect class for interacting with the database
  */
 export default class connect {
   public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null;
-  public dataPath: string = "";
   public devLogs: DevLogsOptions = { enable: false, path: "" };
-  public encryption: EncryptionOptions = { secret: "" };
+  public SecureSystem: SecureSystem = { enable: false, secret: "" };
   public backup: BackupOptions = { enable: false, path: "", retention: 0 };
+  public dataPath: string = "";
   public fileType: string = "";
   public adapterType: string = "";
   public key: string;
@@ -75,32 +33,35 @@ export default class connect {
   constructor(options: AdapterOptions) {
     this.dataPath = options.dataPath;
     this.devLogs = options.devLogs;
-    this.encryption = options.encryption;
-    this.key = options.encryption?.secret || 'versedb';
-    if (options.backup) {
-      this.backup = options.backup;
-    }
+    this.SecureSystem = options.secure;
+    this.key = this.SecureSystem?.enable
+      ? this.SecureSystem.secret || "versedb"
+      : "versedb";
+    this.backup = options.backup ?? { enable: false, path: "", retention: 0 };
+
+    const adapterOptions = {
+      devLogs: {
+        enable: this.devLogs?.enable,
+        path: this.devLogs?.path,
+      },
+      dataPath: this.dataPath,
+    };
+
     switch (options.adapter) {
       case "json":
-        this.adapter = new jsonAdapter({
-          devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
-        }, this.key);
-        this.fileType = "verse";
-        this.adapterType = "json"
+        this.adapter = new jsonAdapter(adapterOptions, this.SecureSystem);
+        this.fileType = this.SecureSystem?.enable ? "verse" : "json";
+        this.adapterType = "json";
         break;
       case "yaml":
-        this.adapter = new yamlAdapter({
-          devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
-        }, this.key);
-        this.fileType = "verse";
-        this.adapterType = "yaml"
+        this.adapter = new yamlAdapter(adapterOptions, this.SecureSystem);
+        this.fileType = this.SecureSystem?.enable ? "verse" : "yaml";
+        this.adapterType = "yaml";
         break;
       case "sql":
-        this.adapter = new sqlAdapter({
-          devLogs: { enable: this.devLogs?.enable, path: this.devLogs?.path },
-        }, this.key);
-        this.fileType = "verse";
-        this.adapterType = "sql"
+        this.adapter = new sqlAdapter(adapterOptions, this.SecureSystem);
+        this.fileType = this.SecureSystem?.enable ? "verse" : "sql";
+        this.adapterType = "sql";
         break;
       default:
         logError({
@@ -108,15 +69,17 @@ export default class connect {
           throwErr: true,
           devLogs: this.devLogs,
         });
-
-        check();
     }
 
-    if (this.devLogs && this.devLogs?.enable && !fs.existsSync(this.devLogs?.path)) {
-      fs.mkdirSync(this.devLogs?.path, { recursive: true });
+    if (
+      this.devLogs &&
+      this.devLogs.enable &&
+      !fs.existsSync(this.devLogs.path)
+    ) {
+      fs.mkdirSync(this.devLogs.path, { recursive: true });
     }
 
-    if (this.backup && this.backup.enable && !fs.existsSync(this.backup?.path)) {
+    if (this.backup && this.backup.enable && !fs.existsSync(this.backup.path)) {
       fs.mkdirSync(this.backup.path, { recursive: true });
     }
   }
@@ -136,8 +99,30 @@ export default class connect {
     }
 
     const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-    
+
     return await this.adapter?.load(filePath);
+  }
+
+  async watch(dataname: string): Promise<any> {
+    const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+    return new Promise((resolve, reject) => {
+      fs.watchFile(filePath, { interval: 5 }, async (curr, prev) => {
+        if (curr.mtime !== prev.mtime) {
+          try {
+            const loadedData = await this.adapter?.load(filePath);
+            resolve(loadedData);
+          } catch (error) {
+            reject(error);
+          }
+        }
+      });
+
+      fs.watchFile(filePath, (curr, prev) => {
+        if (curr.size < 0) {
+          reject(new Error("File does not exist."));
+        }
+      });
+    });
   }
 
   /**
@@ -231,6 +216,29 @@ export default class connect {
     }
   }
 
+  async batchTasks(operations: any[]) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      !(this.adapter instanceof sqlAdapter) &&
+      typeof this.adapter?.batchTasks === "function"
+    ) {
+      return await this.adapter?.batchTasks(operations);
+    } else {
+      logError({
+        content:
+          "DisplayData operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
   /**
    * @param dataname the name of the data file you want to edit an item in
    * @param query the search query of the item you want to edit
@@ -346,11 +354,8 @@ export default class connect {
           throwErr: true,
         });
       }
-      
-      const results = await this.adapter?.search(
-        this.dataPath,
-        collectionFilters
-      );
+
+      const results = await this.adapter?.search(collectionFilters);
 
       if (results?.acknowledged === false || results?.errorMessage) {
         return results || null;
@@ -367,6 +372,184 @@ export default class connect {
     }
   }
 
+  async nearbyVectors(data: nearbyOptions) {
+    try {
+      if (!this.adapter) {
+        logError({
+          content: "Database not connected. Please call connect method first.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      if (
+        !(
+          this.adapter instanceof jsonAdapter ||
+          this.adapter instanceof yamlAdapter
+        )
+      ) {
+        logError({
+          content: "This option is only valid for json adapter.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      if (this.fileType !== "json") {
+        logError({
+          content: "This option is only valid for json adapter.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      const results = await this.adapter.nearbyVectors(data);
+
+      if (results?.acknowledged === false || results?.errorMessage) {
+        return results || null;
+      }
+
+      return results?.results || null;
+    } catch (error) {
+      logError({
+        content: `An error occurred in nearbyVectors: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return null;
+    }
+  }
+
+  async polygonArea(polygonCoordinates: any) {
+    try {
+      if (!this.adapter) {
+        logError({
+          content: "Database not connected. Please call connect method first.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      if (
+        !(
+          this.adapter instanceof jsonAdapter ||
+          this.adapter instanceof yamlAdapter
+        )
+      ) {
+        logError({
+          content: "This option is only valid for json adapter.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      if (this.fileType !== "json") {
+        logError({
+          content: "This option is only valid for json adapter.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      const results = await this.adapter.calculatePolygonArea(
+        polygonCoordinates
+      );
+
+      if (results?.acknowledged === false || results?.errorMessage) {
+        return results || null;
+      }
+
+      return results?.results || null;
+    } catch (error) {
+      logError({
+        content: `An error occurred in nearbyVectors: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return null;
+    }
+  }
+
+  async bufferZone(geometry: any, bufferDistance: any) {
+    try {
+      if (!this.adapter) {
+        logError({
+          content: "Database not connected. Please call connect method first.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      if (
+        !(
+          this.adapter instanceof jsonAdapter ||
+          this.adapter instanceof yamlAdapter
+        )
+      ) {
+        logError({
+          content: "This option is only valid for json adapter.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      if (this.fileType !== "json") {
+        logError({
+          content: "This option is only valid for json adapter.",
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+        return null;
+      }
+
+      const results = await this.adapter.bufferZone(geometry, bufferDistance);
+
+      if (results?.acknowledged === false || results?.errorMessage) {
+        return results || null;
+      }
+
+      return results?.results || null;
+    } catch (error) {
+      logError({
+        content: `An error occurred in nearbyVectors: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return null;
+    }
+  }
+
+  async bulkWrite(dataname: string, operation: any[]) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      !(this.adapter instanceof sqlAdapter) &&
+      typeof this.adapter?.batchTasks === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.batchTasks(operation);
+    } else {
+      logError({
+        content: "Add operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
   /**
    * a function to create a new table in SQL database (Note*: this is only supported for SQL adapter)
    * @param dataname the name of the data file
@@ -477,6 +660,45 @@ export default class connect {
     }
   }
 
+  async join(
+    dataname: string,
+    searchOptions: { table: string; query: string }[],
+    displayOptions?: searchFilters
+  ) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      !(
+        this.adapter instanceof jsonAdapter ||
+        this.adapter instanceof yamlAdapter
+      ) &&
+      typeof this.adapter?.search === "function"
+    ) {
+      const sourceFilePath = path.join(
+        this.dataPath,
+        `${dataname}.${this.fileType}`
+      );
+      const result = await this.adapter.search(
+        dataname,
+        searchOptions,
+        displayOptions
+      );
+      return result;
+    } else {
+      logError({
+        content: "Join operation only supports sql adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
   /**
    * a function to remove data from a table (Note*: this is only supported for SQL adapter)
    * @param dataname the name of the data file you want to use
@@ -573,11 +795,7 @@ export default class connect {
       typeof this.adapter?.updateMany === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.updateMany(
-        filePath,
-        queries,
-        newData
-      );
+      return await this.adapter?.updateMany(filePath, queries, newData);
     } else {
       logError({
         content: "Update Many operation only supports Json & Yaml adapters.",
@@ -704,7 +922,7 @@ export default class connect {
    * @param tableName the table name
    * @returns documents count
    */
-  async countDoc(dataname: string, tableName: string) {
+  async countDoc(dataname: string, tableName?: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -712,6 +930,7 @@ export default class connect {
         throwErr: true,
       });
     }
+    const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
 
     if (
       !(
@@ -720,14 +939,14 @@ export default class connect {
       ) &&
       typeof this.adapter?.countDoc === "function"
     ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      if (!tableName)
+        throw new Error("Table name is required for count document operation.");
       return await this.adapter?.countDoc(filePath, tableName);
-    } else {
-      logError({
-        content: "Count Document operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
+    } else if (
+      this.adapter instanceof jsonAdapter ||
+      this.adapter instanceof yamlAdapter
+    ) {
+      return await this.adapter?.countDoc(filePath);
     }
   }
 
@@ -777,22 +996,8 @@ export default class connect {
       });
     }
 
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.dataSize === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.dataSize(filePath);
-    } else {
-      logError({
-        content: "Data Size operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
+    const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+    return await this.adapter?.dataSize(filePath);
   }
 
   /**
@@ -914,178 +1119,6 @@ export default class connect {
   }
 
   /**
-   * a funciton to get the info of a json/yaml file
-   * @param {dataname} options an option to get the info of a supusfic data file
-   * @returns
-   */
-  async info(options: { dataname?: string }): Promise<AdapterResults> {
-    const dataPathFull = path.resolve(this.dataPath);
-
-    try {
-      const stats = await fs.promises.stat(dataPathFull);
-      if (!stats.isDirectory()) {
-        logError({
-          content: "Not a Directory",
-          devLogs: this.devLogs,
-          throwErr: true,
-        });
-        return {
-          acknowledged: false,
-          message: "Not a Directory",
-          errorMessage: "Not a Directory",
-          error: new Error("Not a Directory"),
-        };
-      }
-      const dataPathStats = await fs.promises.readdir(dataPathFull, {
-        withFileTypes: true,
-      });
-      const fileStats = await Promise.all(
-        dataPathStats.map((stat: any) =>
-          stat.isFile()
-            ? fs.promises.stat(path.resolve(dataPathFull, stat.name))
-            : Promise.resolve(null)
-        )
-      );
-      const filesSize = fileStats.filter(Boolean).map((stat: any) => stat.size);
-      const filesMetadata = dataPathStats
-        .filter((stat: any) => stat.isFile())
-        .map((stat: any) => ({
-          filename: stat.name,
-          size: stat.isFile()
-            ? fileStats.find((f: any) => f.isFile() && f.ino === stat.ino)
-                ?.size || 0
-            : 0,
-        }));
-
-      const files: { name: string; size: number }[] = [];
-
-      const entries = await fs.promises.readdir(this.dataPath, {
-        withFileTypes: true,
-      });
-
-      for (const entry of entries) {
-        if (entry.isFile()) {
-          if (options.dataname && entry.name !== options.dataname) {
-            continue;
-          }
-          const filePath = path.join(this.dataPath, entry.name);
-          const fileStats = await fs.promises.stat(filePath);
-          files.push({
-            name: entry.name,
-            size: fileStats.size,
-          });
-        }
-      }
-
-      return {
-        acknowledged: true,
-        message: "Loaded and detected database size",
-        results: {
-          files: filesMetadata,
-          totalSize: filesSize.reduce((total: any, size: any) => total + size, 0),
-        },
-      };
-    } catch (error: any) {
-      logError({
-        content: `Error in info function: ${error.message}`,
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-      return {
-        acknowledged: false,
-        message: "Data failed tobe loaded",
-        error: error.message,
-      };
-    }
-  }
-
-  /**
-   * a funciton to get the number of objects in a file
-   * @param {dataname} the name of the data you want to get the number of the objects inside it
-   * @param {query} an optional query to get the number of the objects that only contains this query
-   * @returns number of objects in a file
-   */
-  async countDocuments({
-    dataname,
-    query,
-  }: {
-    dataname: string;
-    query?: { [key: string]: string };
-  }): Promise<AdapterResults> {
-    const dataPathFull = path.resolve(this.dataPath);
-
-    try {
-      const stats = await fs.promises.stat(dataPathFull);
-
-      if (!stats.isDirectory()) {
-        return {
-          acknowledged: false,
-          message: "Not a Directory",
-          errorMessage: "Not a Directory",
-          error: new Error("Not a Directory"),
-        };
-      }
-
-      const dataPathStats = await fs.promises.readdir(dataPathFull, {
-        withFileTypes: true,
-      });
-      const fileStats = await Promise.all(
-        dataPathStats.map((stat: any) =>
-          stat.isFile()
-            ? fs.promises.stat(path.resolve(dataPathFull, stat.name))
-            : Promise.resolve(null)
-        )
-      );
-
-      let matchingFiles = fileStats.filter((stat: any) => stat !== null);
-
-      if (dataname) {
-        matchingFiles = matchingFiles.filter(
-          (stat: any) => path.basename(stat.name, ".json") === dataname
-        );
-      }
-
-      if (query) {
-        const keys = Object.keys(query);
-
-        matchingFiles = matchingFiles.filter(async (stat: any) => {
-          const fileData = JSON.parse(
-            await fs.promises.readFile(stat.name, "utf-8")
-          );
-
-          for (const key of keys) {
-            if (fileData[key] !== query[key]) {
-              return false;
-            }
-          }
-
-          return true;
-        });
-      }
-
-      return {
-        acknowledged: true,
-        message: "Counted documents based on the provided query",
-        results: {
-          count: matchingFiles.length,
-        },
-      };
-    } catch (error: any) {
-      logError({
-        content: `Error in countDoc function: ${error.message}`,
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-
-      return {
-        acknowledged: false,
-        message: "Failed to count the documents",
-        error: error.message,
-      };
-    }
-  }
-
-  /**
    * @param dataname the schema name
    * @param schema the schema defination
    * @returns {add} to add data to the database
@@ -1151,6 +1184,58 @@ export default class connect {
 
         drop: async function (this: connect) {
           return this.drop(dataname);
+        }.bind(this),
+
+        updateMany: async function (
+          this: connect,
+          queries: any[],
+          newData: operationKeys
+        ) {
+          const validationErrors: any = schema.validate(newData);
+          if (validationErrors) {
+            return Promise.reject(validationErrors);
+          }
+
+          return this.updateMany(dataname, queries, newData);
+        }.bind(this),
+
+        allData: async function (this: connect, displayOptions: any) {
+          return this.loadAll(dataname, displayOptions);
+        }.bind(this),
+
+        search: async function (
+          this: connect,
+          collectionFilters: CollectionFilter[]
+        ) {
+          return this.search(collectionFilters);
+        }.bind(this),
+
+        nearbyVectors: async function (this: connect, data: any) {
+          return this.nearbyVectors(data);
+        }.bind(this),
+
+        bufferZone: async function (
+          this: connect,
+          geometry: any,
+          bufferDistance: any
+        ) {
+          return this.bufferZone(geometry, bufferDistance);
+        }.bind(this),
+
+        polygonArea: async function (this: connect, polygonCoordinates: any) {
+          return this.polygonArea(polygonCoordinates);
+        }.bind(this),
+
+        countDoc: async function (this: connect) {
+          return this.countDoc(dataname);
+        }.bind(this),
+
+        dataSize: async function (this: connect) {
+          return this.dataSize(dataname);
+        }.bind(this),
+
+        watch: async function (this: connect) {
+          return this.watch(dataname);
         }.bind(this),
       };
     } else {
