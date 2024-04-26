@@ -6,8 +6,10 @@ async function Setup(adapter: string): Promise<any> {
     adapter: `${adapter}`,
     dataPath: `./tests/${adapter}/data`,
     devLogs: { enable: true, path: `./tests/${adapter}/logs` },
-    encryption: { enable: false, secret: "" },
-    backup: { enable: false, path: "", retention: 0 },
+    encryption: {
+      enable: true,
+      secret: "versedb",
+    },
   };
 
   const db = new versedb.connect(adapterOptions);
@@ -18,9 +20,10 @@ async function Teardown(db: string) {
   await fs.promises.rm(`./tests/${db}`, { recursive: true, force: true });
 }
 
-describe("JSON adapter testing all the methods", () => {
+describe("JSON", () => {
   let db: any;
   console.log = function () {};
+  console.info = function () {};
 
   beforeEach(async () => {
     await Setup("json");
@@ -34,8 +37,8 @@ describe("JSON adapter testing all the methods", () => {
   test("add method should add new data to the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name: "John" },
+      { name: "Jane" },
     ];
     const newData = [{ name: "Mike" }];
     const dataname = "add";
@@ -47,14 +50,15 @@ describe("JSON adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "Data added successfully.",
+      results: expect.anything(),
     });
   });
 
   test("load method should return the data from the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name: "John" },
+      { name: "Jane" },
     ];
     const dataname = "load";
 
@@ -63,16 +67,23 @@ describe("JSON adapter testing all the methods", () => {
     const result = await db.load(dataname);
 
     // Assert
-    expect(result).toEqual(data);
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Data loaded successfully.",
+      results: [
+        { _id: expect.anything(), name: "John" },
+        { _id: expect.anything(), name: "Jane" },
+      ],
+    });
   });
 
   test("remove method should remove data from the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name: "John" },
+      { name: "Jane" },
     ];
-    const query = { _id: "1234" };
+    const query = { name: "John" };
     const dataname = "remove";
 
     // Act
@@ -90,8 +101,8 @@ describe("JSON adapter testing all the methods", () => {
   test("update method should update data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name: "John" },
+      { name: "Jane" },
     ];
     const updateQuery = { $set: { name: "Mike" } };
     const dataname = "update";
@@ -105,7 +116,7 @@ describe("JSON adapter testing all the methods", () => {
       acknowledged: true,
       message: "1 document(s) updated successfully.",
       results: {
-        _id: "1234",
+        _id: expect.anything(),
         name: "Mike",
       },
     });
@@ -114,8 +125,8 @@ describe("JSON adapter testing all the methods", () => {
   test("updateMany method should update data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name: "John" },
+      { name: "Jane" },
     ];
     const filter = { name: ["John", "Jane"] };
     const updateQuery = { name: "Mike" };
@@ -131,7 +142,7 @@ describe("JSON adapter testing all the methods", () => {
       message: "1 document(s) updated successfully.",
       results: [
         {
-          _id: "1234",
+          _id: expect.anything(),
           name: "Mike",
         },
       ],
@@ -141,8 +152,8 @@ describe("JSON adapter testing all the methods", () => {
   test("find method should return the data that matches the specified query", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name: "John" },
+      { name:"Jane" },
     ];
     const query = { name: "John" };
     const dataname = "find";
@@ -155,17 +166,17 @@ describe("JSON adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "Found data matching your query.",
-      results: { _id: "1234", name: "John" },
+      results: { _id: expect.anything(), name: "John" },
     });
   });
 
   test("loadAll method should return all the data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "Mark" },
-      { _id: "5678", name: "Anas" },
-      { _id: "1234", name: "Anas" },
-      { _id: "5678", name: "Mark" },
+      { name:"Mark" },
+      { name:"Anas" },
+      { name:"Anas" },
+      { name:"Mark" },
     ];
     const dataname = "loadAll";
     const displayOptions = {
@@ -189,8 +200,8 @@ describe("JSON adapter testing all the methods", () => {
       message: "Data found with the given options.",
       results: {
         allData: [
-          { _id: "1234", name: "Mark" },
-          { _id: "5678", name: "Mark" },
+          { _id: expect.anything(), name: "Mark" },
+          { _id: expect.anything(), name: "Mark" },
         ],
       },
     });
@@ -199,8 +210,8 @@ describe("JSON adapter testing all the methods", () => {
   test("drop method should delete all the data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
     const dataname = "drop";
 
@@ -219,12 +230,12 @@ describe("JSON adapter testing all the methods", () => {
   test("search method should return the data that matches the specified query", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "mark", author: "maher" },
-      { _id: "5678", name: "anas", author: "kmosha" },
+      { name:"mark", author: "maher" },
+      { name:"anas", author: "kmosha" },
     ];
     const data2 = [
-      { _id: "1234", name: "anas", author: "kmosha" },
-      { _id: "5678", name: "mark", author: "maher" },
+      { name:"anas", author: "kmosha" },
+      { name:"mark", author: "maher" },
     ];
     const collectionFilters = [
       {
@@ -248,15 +259,16 @@ describe("JSON adapter testing all the methods", () => {
 
     // Assert
     expect(result).toEqual({
-      posts: [{ _id: "5678", author: "maher", name: "mark" }],
-      users: [{ _id: "1234", author: "maher", name: "mark" }],
+      posts: [{ _id: expect.anything(), author: "maher", name: "mark" }],
+      users: [{ _id: expect.anything(), author: "maher", name: "mark" }],
     });
   });
 });
 
-describe("YAML adapter testing all the methods", () => {
+describe("YAML", () => {
   let db: any;
   console.log = function () {};
+  console.info = function () {};
 
   beforeEach(async () => {
     await Setup("yaml");
@@ -270,8 +282,8 @@ describe("YAML adapter testing all the methods", () => {
   test("add method should add new data to the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
     const newData = [{ name: "Mike" }];
     const dataname = "add";
@@ -283,14 +295,15 @@ describe("YAML adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "Data added successfully.",
+      results: expect.anything(),
     });
   });
 
   test("load method should return the data from the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
     const dataname = "load";
 
@@ -299,16 +312,23 @@ describe("YAML adapter testing all the methods", () => {
     const result = await db.load(dataname);
 
     // Assert
-    expect(result).toEqual(data);
+    expect(result).toEqual({
+      acknowledged: true,
+      message: "Data loaded successfully.",
+      results: [
+        { _id: expect.anything(), name: "John" },
+        { _id: expect.anything(), name: "Jane" },
+      ],
+    });
   });
 
   test("remove method should remove data from the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
-    const query = { _id: "1234" };
+    const query = { name: "John" };
     const dataname = "remove";
 
     // Act
@@ -326,8 +346,8 @@ describe("YAML adapter testing all the methods", () => {
   test("update method should update data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
     const updateQuery = { $set: { name: "Mike" } };
     const dataname = "update";
@@ -341,7 +361,7 @@ describe("YAML adapter testing all the methods", () => {
       acknowledged: true,
       message: "1 document(s) updated successfully.",
       results: {
-        _id: "1234",
+        _id: expect.anything(),
         name: "Mike",
       },
     });
@@ -350,8 +370,8 @@ describe("YAML adapter testing all the methods", () => {
   test("updateMany method should update data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
     const filter = { name: ["John", "Jane"] };
     const updateQuery = { name: "Mike" };
@@ -367,7 +387,7 @@ describe("YAML adapter testing all the methods", () => {
       message: "1 document(s) updated successfully.",
       results: [
         {
-          _id: "1234",
+          _id: expect.anything(),
           name: "Mike",
         },
       ],
@@ -377,8 +397,8 @@ describe("YAML adapter testing all the methods", () => {
   test("find method should return the data that matches the specified query", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
     const query = { name: "John" };
     const dataname = "find";
@@ -391,17 +411,17 @@ describe("YAML adapter testing all the methods", () => {
     expect(result).toEqual({
       acknowledged: true,
       message: "Found data matching your query.",
-      results: { _id: "1234", name: "John" },
+      results: { _id: expect.anything(), name: "John" },
     });
   });
 
   test("loadAll method should return all the data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "Mark" },
-      { _id: "5678", name: "Anas" },
-      { _id: "1234", name: "Anas" },
-      { _id: "5678", name: "Mark" },
+      { name:"Mark" },
+      { name:"Anas" },
+      { name:"Anas" },
+      { name:"Mark" },
     ];
     const dataname = "loadAll";
     const displayOptions = {
@@ -425,8 +445,8 @@ describe("YAML adapter testing all the methods", () => {
       message: "Data found with the given options.",
       results: {
         allData: [
-          { _id: "1234", name: "Mark" },
-          { _id: "5678", name: "Mark" },
+          { _id: expect.anything(), name: "Mark" },
+          { _id: expect.anything(), name: "Mark" },
         ],
       },
     });
@@ -435,8 +455,8 @@ describe("YAML adapter testing all the methods", () => {
   test("drop method should delete all the data in the specified file", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "John" },
-      { _id: "5678", name: "Jane" },
+      { name:"John" },
+      { name:"Jane" },
     ];
     const dataname = "drop";
 
@@ -455,12 +475,12 @@ describe("YAML adapter testing all the methods", () => {
   test("search method should return the data that matches the specified query", async () => {
     // Arrange
     const data = [
-      { _id: "1234", name: "mark", author: "maher" },
-      { _id: "5678", name: "anas", author: "kmosha" },
+      { name:"mark", author: "maher" },
+      { name:"anas", author: "kmosha" },
     ];
     const data2 = [
-      { _id: "1234", name: "anas", author: "kmosha" },
-      { _id: "5678", name: "mark", author: "maher" },
+      { name:"anas", author: "kmosha" },
+      { name:"mark", author: "maher" },
     ];
     const collectionFilters = [
       {
@@ -484,8 +504,8 @@ describe("YAML adapter testing all the methods", () => {
 
     // Assert
     expect(result).toEqual({
-      posts: [{ _id: "5678", author: "maher", name: "mark" }],
-      users: [{ _id: "1234", author: "maher", name: "mark" }],
+      posts: [{ _id: expect.anything(), author: "maher", name: "mark" }],
+      users: [{ _id: expect.anything(), author: "maher", name: "mark" }],
     });
   });
 });
