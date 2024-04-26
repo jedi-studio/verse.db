@@ -4,7 +4,6 @@
     "module": "CommonJS",
     "incremental": true,
     "composite": true,
-    "tsBuildInfoFile": "./.tsbuildinfo",
     "moduleResolution": "node",
     "declaration": true,
     "declarationMap": true,
