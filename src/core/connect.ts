@@ -33,7 +33,7 @@ export default class connect {
   constructor(options: AdapterOptions) {
     this.dataPath = options.dataPath;
     this.devLogs = options.devLogs;
-    this.SecureSystem = options.secure;
+    this.SecureSystem = options.encryption;
     this.key = this.SecureSystem?.enable
       ? this.SecureSystem.secret || "versedb"
       : "versedb";

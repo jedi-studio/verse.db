@@ -28,7 +28,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "jest"
+    "test": "jest --forceExit"
   },
   "funding": "https://github.com/sponsors/jedi-studio",
   "devDependencies": {
