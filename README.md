@@ -68,4 +68,4 @@ Note\*: that you can make a multiple databases in the same time with/without the
 
 ## Documentation And Usage Information
 
-- Kindly Note: Database usage and explaination has been  moved fully to our verse.db website. You can visit us on [verse.db](versedb.jedi-studio.com)
+- Kindly Note: Database usage and explaination has been  moved fully to our verse.db website. You can visit us on [verse.db](https://versedb.jedi-studio.com)
