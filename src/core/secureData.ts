@@ -174,7 +174,7 @@ export async function decodeJSON(
     }
 
     return objArray;
-  } catch (error: any) {
+  } catch (e: any) {
     return null;
   }
 }
@@ -208,7 +208,7 @@ export async function decodeYAML(filePath: string, key: string): Promise<any> {
     const decryptedData = decrypt(buffer, key);
     const yamlData = decryptedData.toString("utf-8");
     return yaml.parse(yamlData);
-  } catch (error: any) {
+  } catch (e: any) {
     return null;
   }
 }
@@ -256,7 +256,7 @@ export async function decodeSQL(
     }
 
     return decompressedData;
-  } catch (error: any) {
+  } catch (e: any) {
     return null;
   }
 }

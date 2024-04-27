@@ -132,8 +132,6 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     tableName: string,
     tableDefinition: string
   ): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
-
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -175,35 +173,35 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         fs.writeFileSync(dataname, updatedContent);
 
         logSuccess({
-          content: `Created table '${tableName}' in ${filePath}`,
+          content: `Created table '${tableName}' in ${dataname}`,
           devLogs: this.devLogs,
         });
 
         return {
           acknowledged: true,
-          message: `Created table '${tableName}' in ${filePath}`,
+          message: `Created table '${tableName}' in ${dataname}`,
           results: null,
         };
       } else {
         logError({
-          content: `Table '${tableName}' already exists in ${filePath}.`,
+          content: `Table '${tableName}' already exists in ${dataname}.`,
           devLogs: this.devLogs,
           throwErr: true,
         });
         return {
           acknowledged: false,
-          errorMessage: `Table '${tableName}' already exists in ${filePath}.`,
+          errorMessage: `Table '${tableName}' already exists in ${dataname}.`,
           results: null,
         };
       }
-    } catch (error) {
+    } catch (e: any) {
       logError({
-        content: `Failed to create table '${tableName}' in ${filePath}: ${error}`,
+        content: `Failed to create table '${tableName}' in ${dataname}: ${e.message}`,
         devLogs: this.devLogs,
       });
       return {
         acknowledged: false,
-        errorMessage: `Failed to create table '${tableName}' in ${filePath}: ${error}`,
+        errorMessage: `Failed to create table '${tableName}' in ${dataname}: ${e.message}`,
         results: null,
       };
     }
@@ -214,7 +212,6 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     tableName: string,
     data: any[]
   ): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -250,35 +247,35 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         fs.writeFileSync(dataname, updatedContent);
 
         logSuccess({
-          content: `Added data to table '${tableName}' in ${filePath}`,
+          content: `Added data to table '${tableName}' in ${dataname}`,
           devLogs: this.devLogs,
         });
 
         return {
           acknowledged: true,
-          message: `Added data to table '${tableName}' in ${filePath}`,
+          message: `Added data to table '${tableName}' in ${dataname}`,
           results: null,
         };
       } else {
         logError({
-          content: `Table '${tableName}' does not exist in ${filePath}.`,
+          content: `Table '${tableName}' does not exist in ${dataname}.`,
           devLogs: this.devLogs,
           throwErr: true,
         });
         return {
           acknowledged: false,
-          errorMessage: `Table '${tableName}' does not exist in ${filePath}.`,
+          errorMessage: `Table '${tableName}' does not exist in ${dataname}.`,
           results: null,
         };
       }
-    } catch (error) {
+    } catch (e: any) {
       logError({
-        content: `Failed to add data to table '${tableName}' in ${filePath}: ${error}`,
+        content: `Failed to add data to table '${tableName}' in ${dataname}: ${e.message}`,
         devLogs: this.devLogs,
       });
       return {
         acknowledged: false,
-        errorMessage: `Failed to add data to table '${tableName}' in ${filePath}: ${error}`,
+        errorMessage: `Failed to add data to table '${tableName}' in ${dataname}: ${e.message}`,
         results: null,
       };
     }
@@ -289,7 +286,6 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     tableName: string,
     condition?: string
   ): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
       const fileContentResult = await this.load(dataname);
 
@@ -320,24 +316,24 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
         };
       } else {
         logError({
-          content: `Table '${tableName}' does not exist in ${filePath}.`,
+          content: `Table '${tableName}' does not exist in ${dataname}.`,
           devLogs: this.devLogs,
           throwErr: true,
         });
         return {
           acknowledged: false,
-          errorMessage: `Table '${tableName}' does not exist in ${filePath}.`,
+          errorMessage: `Table '${tableName}' does not exist in ${dataname}.`,
           results: null,
         };
       }
-    } catch (error) {
+    } catch (e: any) {
       logError({
-        content: error,
+        content: e.message,
         devLogs: this.devLogs,
       });
       return {
         acknowledged: false,
-        errorMessage: `Failed to find data in table '${tableName}' in ${filePath}: ${error}`,
+        errorMessage: `Failed to find data in table '${tableName}' in ${dataname}: ${e.message}`,
         results: null,
       };
     }
@@ -348,7 +344,6 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     tableName: string,
     dataToRemove: any[]
   ): Promise<AdapterResults> {
-    const filePath = `${dataname}`;
     try {
       const fileContentResult = await this.load(dataname);
       if (!fileContentResult.acknowledged) {
@@ -366,12 +361,12 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       const tableExists = fileContent.includes(`CREATE TABLE ${tableName}`);
       if (!tableExists) {
         logError({
-          content: `Table '${tableName}' does not exist in ${filePath}.`,
+          content: `Table '${tableName}' does not exist in ${dataname}.`,
           devLogs: this.devLogs,
         });
         return {
           acknowledged: false,
-          errorMessage: `Table '${tableName}' does not exist in ${filePath}.`,
+          errorMessage: `Table '${tableName}' does not exist in ${dataname}.`,
           results: null,
         };
       }
@@ -385,12 +380,12 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       const columnsMatch = columnsRegex.exec(fileContent);
       if (!columnsMatch) {
         logError({
-          content: `Failed to parse columns for table '${tableName}' in ${filePath}.`,
+          content: `Failed to parse columns for table '${tableName}' in ${dataname}.`,
           devLogs: this.devLogs,
         });
         return {
           acknowledged: false,
-          errorMessage: `Failed to parse columns for table '${tableName}' in ${filePath}.`,
+          errorMessage: `Failed to parse columns for table '${tableName}' in ${dataname}.`,
           results: null,
         };
       }
@@ -423,12 +418,12 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
 
       if (!foundMatch) {
         logError({
-          content: `No matching data found to remove in table '${tableName}' in ${filePath}.`,
+          content: `No matching data found to remove in table '${tableName}' in ${dataname}.`,
           devLogs: this.devLogs,
         });
         return {
           acknowledged: false,
-          errorMessage: `No matching data found to remove in table '${tableName}' in ${filePath}.`,
+          errorMessage: `No matching data found to remove in table '${tableName}' in ${dataname}.`,
           results: null,
         };
       }
@@ -440,23 +435,23 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
       fs.writeFileSync(dataname, fileContent);
 
       logSuccess({
-        content: `Removed data from table '${tableName}' in ${filePath}`,
+        content: `Removed data from table '${tableName}' in ${dataname}`,
         devLogs: this.devLogs,
       });
 
       return {
         acknowledged: true,
-        message: `Removed data from table '${tableName}' in ${filePath}`,
+        message: `Removed data from table '${tableName}' in ${dataname}`,
         results: null,
       };
-    } catch (error) {
+    } catch (e: any) {
       logError({
-        content: `Failed to remove data from table '${tableName}' in ${filePath}: ${error}`,
+        content: `Failed to remove data from table '${tableName}' in ${dataname}: ${e.message}`,
         devLogs: this.devLogs,
       });
       return {
         acknowledged: false,
-        errorMessage: `Failed to remove data from table '${tableName}' in ${filePath}: ${error}`,
+        errorMessage: `Failed to remove data from table '${tableName}' in ${dataname}: ${e.message}`,
         results: null,
       };
     }
