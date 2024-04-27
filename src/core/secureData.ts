@@ -1,5 +1,7 @@
 import fs from "fs";
 import yaml from "yaml";
+import path from "path";
+import { isArrayBuffer } from "util/types";
 
 interface ObjectArray {
   [key: string]: any;
@@ -259,4 +261,57 @@ export async function decodeSQL(
   } catch (error: any) {
     return null;
   }
+}
+
+export async function neutralizer(folderPath: string, info: { dataType: "json" | "yaml" | "sql", secret: string }): Promise<any> {
+
+  const extension = "verse";
+  const foundFiles: string[] = [];
+
+  if (!info || info.dataType || info.secret || folderPath) throw new Error("Wrong usage: Please Make sure to rpovde folder path and info object parameter { dataType, secret}.")
+  function searchFiles(currentPath: string): void {
+      const files = fs.readdirSync(currentPath);
+      files.forEach((file) => {
+          const filePath = path.join(currentPath, file);
+          const stats = fs.statSync(filePath);
+          if (stats.isDirectory()) {
+              searchFiles(filePath);
+          } else {
+              const fileExtension = path.extname(file).toLowerCase();
+              if (fileExtension === `.${extension}`) {
+                  foundFiles.push(filePath); 
+              }
+          }
+      });
+  }
+
+  searchFiles(folderPath);
+
+  if (info.dataType === 'json') {    
+      for (let i = 0; i < foundFiles.length; i++) {
+        const filePath = foundFiles[i];
+        const decodedData: any = await decodeJSON(filePath, info.secret);
+        if (!decodedData || decodedData === null) throw new Error("Failed to decode JSON data.");
+        const jsonData = JSON.stringify(decodedData)
+        await fs.promises.writeFile(filePath, jsonData);
+      }
+  } else if (info.dataType === 'yaml') {
+    for (let i = 0; i < foundFiles.length; i++) {
+      const filePath = foundFiles[i];
+      const decodedData: any = await decodeYAML(filePath, info.secret);
+      if (!decodedData || decodedData === null) throw new Error("Failed to decode YAML data.");
+      const yamlData = yaml.stringify(decodedData)
+      await fs.promises.writeFile(filePath, yamlData);
+    } 
+  } else if (info.dataType === 'sql') {
+    for (let i = 0; i < foundFiles.length; i++) {
+      const filePath = foundFiles[i];
+      const encodedData =  await fs.promises.readFile(filePath, "utf-8");
+      const decodedData: any = await decodeSQL(encodedData, info.secret);
+      if (!decodedData || decodedData === null) throw new Error("Failed to decode SQL data.");
+      await fs.promises.writeFile(filePath, decodedData);
+    } 
+  }
+  
+  return foundFiles;
 }
