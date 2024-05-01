@@ -1122,31 +1122,6 @@ cross-spawn@^7.0.0, cross-spawn@^7.0.3:
     shebang-command "^2.0.0"
     which "^2.0.1"
 
-csv-generate@^4.4.0:
-  version "4.4.0"
-  resolved "https://registry.npmjs.org/csv-generate/-/csv-generate-4.4.0.tgz"
-  integrity sha512-geM01acNPZ0wr4/9sKev5fCzFG/tsc/NbuFWrhLc47M1zQyUdEJH65+cxTLIVafEwhBjIYwQ7fdOL9roBqVltQ==
-
-csv-parse@^5.5.5:
-  version "5.5.5"
-  resolved "https://registry.npmjs.org/csv-parse/-/csv-parse-5.5.5.tgz"
-  integrity sha512-erCk7tyU3yLWAhk6wvKxnyPtftuy/6Ak622gOO7BCJ05+TYffnPCJF905wmOQm+BpkX54OdAl8pveJwUdpnCXQ==
-
-csv-stringify@^6.4.6:
-  version "6.4.6"
-  resolved "https://registry.npmjs.org/csv-stringify/-/csv-stringify-6.4.6.tgz"
-  integrity sha512-h2V2XZ3uOTLilF5dPIptgUfN/o2ia/80Ie0Lly18LAnw5s8Eb7kt8rfxSUy24AztJZas9f6DPZpVlzDUtFt/ag==
-
-csv@^6.3.8:
-  version "6.3.8"
-  resolved "https://registry.npmjs.org/csv/-/csv-6.3.8.tgz"
-  integrity sha512-gRh3yiT9bHBA5ka2yOpyFqAVu/ZpwWzajMUR/es0ljevAE88WyHBuMUy7jzd2o5j6LYQesEO/AyhbQ9BhbDXUA==
-  dependencies:
-    csv-generate "^4.4.0"
-    csv-parse "^5.5.5"
-    csv-stringify "^6.4.6"
-    stream-transform "^3.3.1"
-
 debug@^4.1.0, debug@^4.1.1, debug@^4.3.1:
   version "4.3.4"
   resolved "https://registry.npmjs.org/debug/-/debug-4.3.4.tgz"
@@ -2506,11 +2481,6 @@ stack-utils@^2.0.3:
   integrity sha512-XlkWvfIm6RmsWtNJx+uqtKLS8eqFbxUg0ZzLXqY0caEy9l7hruX8IpiDnjsLavoBgqCCR71TqWO8MaXYheJ3RQ==
   dependencies:
     escape-string-regexp "^2.0.0"
-
-stream-transform@^3.3.1:
-  version "3.3.1"
-  resolved "https://registry.npmjs.org/stream-transform/-/stream-transform-3.3.1.tgz"
-  integrity sha512-BL8pv9QL8Ikd11oZwlRDp1qYMhGR0i50zI9ltoijKGc4ubQWal/Rc4p6SYJp1TBOGpE0uAGchwbxOZ1ycwTuqQ==
 
 string-length@^4.0.1:
   version "4.0.2"
