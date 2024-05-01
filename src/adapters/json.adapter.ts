@@ -1858,6 +1858,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       };
     }
   }
+  
   async moveData(
     from: string,
     to: string,
@@ -1933,7 +1934,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       data.push(...sourceData.results);
 
       let inData: any;
-      if (this.secure.enable) {
+      if (this.secure.enable && from.endsWith('.verse')) {
         inData = await encodeJSON(data, this.secure.secret);
       } else {
         inData = JSON.stringify(data);

@@ -33,7 +33,7 @@ export default class connect {
   constructor(options: AdapterOptions) {
     this.dataPath = options.dataPath;
     this.devLogs = options.devLogs;
-    this.SecureSystem = options.encryption;
+    this.SecureSystem = options.secure;
     this.key = this.SecureSystem?.enable
       ? this.SecureSystem.secret || "versedb"
       : "versedb";
@@ -81,6 +81,22 @@ export default class connect {
 
     if (this.backup && this.backup.enable && !fs.existsSync(this.backup.path)) {
       fs.mkdirSync(this.backup.path, { recursive: true });
+    }
+
+    if (this.SecureSystem && this.SecureSystem.enable && this.SecureSystem.secret) {
+      const configPath = path.join(this.dataPath, '.config');
+      const secretsFilePath = path.join(configPath, '.secrets.env');
+      const secretString = `SECRET=${this.SecureSystem.secret}\n`;
+
+      if (!fs.existsSync(configPath)) {
+        fs.mkdirSync(configPath);
+      }
+
+      if (!fs.existsSync(secretsFilePath)) {
+        fs.writeFileSync(secretsFilePath, secretString);
+      } else {
+        fs.appendFileSync(secretsFilePath, secretString);
+      }
     }
   }
 
@@ -1216,6 +1232,9 @@ export default class connect {
 
         watch: async function (this: connect) {
           return this.watch(dataname);
+        }.bind(this),
+        batchTasks: async function (this: connect, operations: any[]) {
+          return this.batchTasks(operations);
         }.bind(this),
       };
     } else {

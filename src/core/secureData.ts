@@ -1,5 +1,6 @@
 import fs from "fs";
 import yaml from "yaml";
+import path from "path";
 
 interface ObjectArray {
   [key: string]: any;
@@ -259,4 +260,64 @@ export async function decodeSQL(
   } catch (e: any) {
     return null;
   }
+}
+
+export async function neutralizer(folderPath: string, info: { dataType: "json" | "yaml" | "sql", secret: string }): Promise<string[]> {
+
+  const foundFiles: string[] = [];
+
+  if (!info || !info.dataType || !info.secret || !folderPath) throw new Error("Wrong usage: Please Make sure to provide folder path and info object parameter { dataType, secret }.");
+
+  function searchFiles(currentPath: string): void {
+      const files = fs.readdirSync(currentPath);
+      files.forEach((file) => {
+          const filePath = path.join(currentPath, file);
+          const stats = fs.statSync(filePath);
+          if (stats.isDirectory()) {
+              searchFiles(filePath);
+          } else {
+              const fileExtension = path.extname(file);
+              if (fileExtension === '.verse') {
+                  foundFiles.push(filePath);
+              }
+          }
+      });
+  }
+
+  searchFiles(folderPath);
+
+  for (let i = 0; i < foundFiles.length; i++) {
+      const filePath = foundFiles[i];
+      const fileExtension = path.extname(filePath);
+      const fileBaseName = path.basename(filePath, fileExtension);
+
+      let decodedData: any;
+      let newData: any;
+
+      if (info.dataType === 'json') {
+          decodedData = await decodeJSON(filePath, info.secret);
+          newData = JSON.stringify(decodedData);
+      } else if (info.dataType === 'yaml') {
+          decodedData = await decodeYAML(filePath, info.secret);
+          newData = yaml.stringify(decodedData);
+      } else if (info.dataType === 'sql') {
+          const encodedData = await fs.promises.readFile(filePath, "utf-8");
+          decodedData = await decodeSQL(encodedData, info.secret);
+          newData = decodedData; 
+      }
+
+      if (!decodedData || newData === null) throw new Error(`Failed to decode ${info.dataType} data.`);
+      
+      const newFilePath = path.join(path.dirname(filePath), fileBaseName);
+      
+      if (info.dataType === 'json') {
+          await fs.promises.writeFile(`${newFilePath}.json`, newData);
+      } else if (info.dataType === 'yaml') {
+          await fs.promises.writeFile(`${newFilePath}.yaml`, newData);
+      } else if (info.dataType === 'sql') {
+          await fs.promises.writeFile(`${newFilePath}.sql`, newData);
+      }
+  }
+
+  return foundFiles;
 }
