@@ -2,6 +2,14 @@
 
 ### Change log:
 
+## Version v2.0
+
+- Added more methods for all adapters.
+- Enhanced older methods.
+- Encryption changed to secure and became optional.
+- Added npm create verse.db@latest, making configuration easier.
+- Added .config folder in dataPath to save ur secrets keys for secure.
+
 ## Version 1.1
 
 - Securing Database.

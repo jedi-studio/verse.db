@@ -87,17 +87,28 @@ export default class connect {
       const configPath = path.join(this.dataPath, '.config');
       const secretsFilePath = path.join(configPath, '.secrets.env');
       const secretString = `SECRET=${this.SecureSystem.secret}\n`;
-
-      if (!fs.existsSync(configPath)) {
-        fs.mkdirSync(configPath);
+    
+      try {
+        if (!fs.existsSync(configPath)) {
+          fs.mkdirSync(configPath);
+        }
+    
+        if (!fs.existsSync(secretsFilePath)) {
+          fs.writeFileSync(secretsFilePath, secretString);
+        } else {
+          fs.appendFileSync(secretsFilePath, secretString);
+        }
+      } catch (e: any) {
+        console.error('Error:', e.message);
+        
+        if (e.code === 'ENOENT' && e.path === configPath) {
+          fs.mkdirSync(configPath, { recursive: true });
+          fs.writeFileSync(secretsFilePath, secretString);
+        } else if (e.code === 'ENOENT' && e.path === secretsFilePath) {
+          fs.writeFileSync(secretsFilePath, secretString);
+        }
       }
-
-      if (!fs.existsSync(secretsFilePath)) {
-        fs.writeFileSync(secretsFilePath, secretString);
-      } else {
-        fs.appendFileSync(secretsFilePath, secretString);
-      }
-    }
+    }     
   }
 
   /**
