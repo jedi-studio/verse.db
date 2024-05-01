@@ -1931,7 +1931,7 @@ export class yamlAdapter extends EventEmitter implements versedbAdapter {
       data.push(...sourceData.results);
 
       let inData: any;
-      if (this.secure.enable) {
+      if (this.secure.enable && from.endsWith('.verse')) {
         inData = await encodeYAML(data, this.secure.secret);
       } else {
         inData = yaml.stringify(data);

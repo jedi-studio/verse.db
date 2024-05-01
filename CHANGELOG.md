@@ -4,6 +4,14 @@
 
 ## Version v2.0
 
+- Added more methods for all adapters.
+- Enhanced older methods.
+- Encryption changed to secure and became optional.
+- Added npm create verse.db@latest, making configuration easier.
+- Added .config folder in dataPath to save ur secrets keys for secure.
+
+## Version v2.0
+
 - Added real-time data store, whcihs uses db.watch('dataname')
 - Added more operations for each adapter, such as: [batchTasks, dataSize, docCount, search, join].
 - Fixed Minor bugs in Connection and types.

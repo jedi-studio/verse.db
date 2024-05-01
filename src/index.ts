@@ -13,6 +13,7 @@ import {
   decodeYAML,
   encodeSQL,
   decodeSQL,
+  neutralizer,
 } from "./core/secureData";
 import connect from "./core/connect";
 import { randomID, randomUUID } from "./lib/id";
@@ -68,6 +69,7 @@ const verseParser = {
   decodeYAML,
   encodeSQL,
   decodeSQL,
+  neutralizer,
 };
 
 const versedb = {
@@ -89,5 +91,6 @@ export {
   verseParser,
   SchemaTypes,
   colors,
+  neutralizer,
 };
 export default versedb;
