@@ -7,76 +7,80 @@ interface ObjectArray {
 }
 
 export async function encodeJSON(data: any, key: string): Promise<Buffer> {
-  const stringedData = JSON.stringify(data);
-  let objArray: any | ObjectArray = stringedData;
-  objArray = JSON.parse(objArray);
-  const buffer: number[] = [];
+  try {
+    const stringedData = JSON.stringify(data);
+    let objArray: any | ObjectArray = stringedData;
+    objArray = JSON.parse(objArray);
+    const buffer: number[] = [];
 
-  const encodeString = (str: string, key: string): string => {
-    let encodedStr = "";
-    for (let i = 0; i < str.length; i++) {
-      const charCode = str.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-      encodedStr += String.fromCharCode(charCode);
+    const encodeString = (str: string, key: string): string => {
+      let encodedStr = "";
+      for (let i = 0; i < str.length; i++) {
+        const charCode = str.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+        encodedStr += String.fromCharCode(charCode);
+      }
+      return encodedStr;
+    };
+
+    if (!Array.isArray(objArray)) {
+      const stringData = (objArray = Object.values(objArray));
+
+      objArray = JSON.stringify(stringData, null, 2);
     }
-    return encodedStr;
-  };
 
-  if (!Array.isArray(objArray)) {
-    const stringData = (objArray = Object.values(objArray));
+    for (const obj of objArray) {
+      const objBuffer: number[] = [];
 
-    objArray = JSON.stringify(stringData, null, 2);
-  }
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          objBuffer.push(key.length);
+          objBuffer.push(...Buffer.from(key));
 
-  for (const obj of objArray) {
-    const objBuffer: number[] = [];
-
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        objBuffer.push(key.length);
-        objBuffer.push(...Buffer.from(key));
-
-        if (typeof obj[key] === "string") {
-          objBuffer.push(0); // String type
-          const encodedStr = encodeString(obj[key], key);
-          const valueLength = Buffer.alloc(4);
-          valueLength.writeInt32BE(encodedStr.length, 0);
-          objBuffer.push(...valueLength);
-          objBuffer.push(...Buffer.from(encodedStr));
-        } else if (typeof obj[key] === "number") {
-          objBuffer.push(1); // Number type
-          const numValue = Buffer.alloc(4);
-          numValue.writeInt32BE(obj[key], 0);
-          objBuffer.push(...numValue);
-        } else if (typeof obj[key] === "boolean") {
-          objBuffer.push(2); // Boolean type
-          objBuffer.push(obj[key] ? 1 : 0);
-        } else if (Array.isArray(obj[key])) {
-          objBuffer.push(3); // Array type
-          const arrayValue = JSON.stringify(obj[key]);
-          const encodedArrayValue = encodeString(arrayValue, key);
-          const valueLength = Buffer.alloc(4);
-          valueLength.writeInt32BE(encodedArrayValue.length, 0);
-          objBuffer.push(...valueLength);
-          objBuffer.push(...Buffer.from(encodedArrayValue));
-        } else if (typeof obj[key] === "object" && obj[key] !== null) {
-          objBuffer.push(4); // Object type
-          const objectValue = JSON.stringify(obj[key]);
-          const encodedObjectValue = encodeString(objectValue, key);
-          const valueLength = Buffer.alloc(4);
-          valueLength.writeInt32BE(encodedObjectValue.length, 0);
-          objBuffer.push(...valueLength);
-          objBuffer.push(...Buffer.from(encodedObjectValue));
-        } else if (obj[key] === null) {
-          objBuffer.push(5); // Null type
+          if (typeof obj[key] === "string") {
+            objBuffer.push(0); // String type
+            const encodedStr = encodeString(obj[key], key);
+            const valueLength = Buffer.alloc(4);
+            valueLength.writeInt32BE(encodedStr.length, 0);
+            objBuffer.push(...valueLength);
+            objBuffer.push(...Buffer.from(encodedStr));
+          } else if (typeof obj[key] === "number") {
+            objBuffer.push(1); // Number type
+            const numValue = Buffer.alloc(4);
+            numValue.writeInt32BE(obj[key], 0);
+            objBuffer.push(...numValue);
+          } else if (typeof obj[key] === "boolean") {
+            objBuffer.push(2); // Boolean type
+            objBuffer.push(obj[key] ? 1 : 0);
+          } else if (Array.isArray(obj[key])) {
+            objBuffer.push(3); // Array type
+            const arrayValue = JSON.stringify(obj[key]);
+            const encodedArrayValue = encodeString(arrayValue, key);
+            const valueLength = Buffer.alloc(4);
+            valueLength.writeInt32BE(encodedArrayValue.length, 0);
+            objBuffer.push(...valueLength);
+            objBuffer.push(...Buffer.from(encodedArrayValue));
+          } else if (typeof obj[key] === "object" && obj[key] !== null) {
+            objBuffer.push(4); // Object type
+            const objectValue = JSON.stringify(obj[key]);
+            const encodedObjectValue = encodeString(objectValue, key);
+            const valueLength = Buffer.alloc(4);
+            valueLength.writeInt32BE(encodedObjectValue.length, 0);
+            objBuffer.push(...valueLength);
+            objBuffer.push(...Buffer.from(encodedObjectValue));
+          } else if (obj[key] === null) {
+            objBuffer.push(5); // Null type
+          }
         }
       }
+
+      buffer.push(objBuffer.length);
+      buffer.push(...objBuffer);
     }
 
-    buffer.push(objBuffer.length);
-    buffer.push(...objBuffer);
+    return Buffer.from(buffer);
+  } catch (error: any) {
+    throw new Error(`Operation cancelled. Error Occurred while securing JSON data: ${error.message}`);
   }
-
-  return Buffer.from(buffer);
 }
 
 export async function decodeJSON(
@@ -193,11 +197,15 @@ function decrypt(data: Buffer, key: string): Buffer {
 }
 
 export async function encodeYAML(yamlData: any, key: string): Promise<Buffer> {
+ try {
   const yamlString = yaml.stringify(yamlData);
   const data = yaml.parse(yamlString);
   const stringFiedData = yaml.stringify(data);
   const compressedData = Buffer.from(stringFiedData, "utf-8");
   return encrypt(compressedData, key);
+ } catch (error: any){
+  throw new Error(`Operation cancelled. Error Occurred while securing YAML data: ${error.message}`)
+ }
 }
 
 export async function decodeYAML(filePath: string, key: string): Promise<any> {
@@ -213,54 +221,58 @@ export async function decodeYAML(filePath: string, key: string): Promise<any> {
     return null;
   }
 }
+
 export async function encodeSQL(data: string, key: string): Promise<string> {
   let compressedEncodedData = "";
   let count = 1;
   for (let i = 0; i < data.length; i++) {
-    if (data[i] === data[i + 1]) {
-      count++;
-    } else {
-      compressedEncodedData += count + data[i];
-      count = 1;
-    }
+      if (data[i] === data[i + 1]) {
+          count++;
+      } else {
+          if (count > 3) {
+              compressedEncodedData += `#${count}#${data[i]}`;
+          } else {
+              compressedEncodedData += data[i].repeat(count);
+          }
+          count = 1;
+      }
   }
 
   let encodedData = "";
   for (let i = 0; i < compressedEncodedData.length; i++) {
-    const charCode =
-      compressedEncodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-    encodedData += String.fromCharCode(charCode);
+      const charCode = compressedEncodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+      encodedData += String.fromCharCode(charCode);
   }
 
   return encodedData;
 }
 
-export async function decodeSQL(
-  encodedData: string,
-  key: string
-): Promise<any> {
-  try {
-    let decodedData = "";
-    for (let i = 0; i < encodedData.length; i++) {
-      const charCode =
-        encodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+export async function decodeSQL(encodedData: string, key: string): Promise<string> {
+  let decodedData = "";
+  for (let i = 0; i < encodedData.length; i++) {
+      const charCode = encodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
       decodedData += String.fromCharCode(charCode);
-    }
-
-    let decompressedData = "";
-    let i = 0;
-    while (i < decodedData.length) {
-      const count = parseInt(decodedData[i]);
-      const char = decodedData[i + 1];
-      decompressedData += char.repeat(count);
-      i += 2;
-    }
-
-    return decompressedData;
-  } catch (e: any) {
-    return null;
   }
+
+  let decompressedData = "";
+  let i = 0;
+  while (i < decodedData.length) {
+      if (decodedData[i] === '#') {
+          const countStartIndex = i + 1;
+          const countEndIndex = decodedData.indexOf('#', countStartIndex);
+          const count = parseInt(decodedData.substring(countStartIndex, countEndIndex));
+          const char = decodedData[countEndIndex + 1];
+          decompressedData += char.repeat(count);
+          i = countEndIndex + 2;
+      } else {
+          decompressedData += decodedData[i];
+          i++;
+      }
+  }
+
+  return decompressedData;
 }
+
 
 export async function neutralizer(folderPath: string, info: { dataType: "json" | "yaml" | "sql", secret: string }): Promise<string[]> {
 

@@ -2,8 +2,6 @@
  * @params Copyright(c) 2023 marco5dev & elias79 & kmoshax
  * MIT Licensed
  */
-
-import axios from "axios";
 import * as path from "path";
 import * as fs from "fs";
 import {
@@ -36,10 +34,15 @@ const getLibraryVersion = function (library: string): string {
   return version;
 };
 
-axios
-  .get("https://registry.npmjs.com/-/v1/search?text=verse.db")
-  .then(function (response: any) {
-    const version: string = response.data.objects[0]?.package?.version;
+fetch("https://registry.npmjs.com/-/v1/search?text=verse.db")
+  .then(function (response) {
+    if (!response.ok) {
+      throw new Error('Failed to fetch');
+    }
+    return response.json();
+  })
+  .then(function (data) {
+    const version = data.objects[0]?.package?.version;
     if (version && getLibraryVersion("verse.db") !== version) {
       logWarning({
         content:
@@ -49,7 +52,7 @@ axios
       });
     }
   })
-  .catch(function (error: any) {
+  .catch(function (error) {
     logError({
       content: error,
     });

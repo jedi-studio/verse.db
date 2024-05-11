@@ -281,7 +281,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
   }
 
-  async find(
+  public async find(
     dataname: string,
     tableName: string,
     condition?: string

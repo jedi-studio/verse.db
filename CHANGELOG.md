@@ -23,6 +23,10 @@
 - Added More options, and filters for find and load all data.
 - Added Move Data for json and yaml. now you can move specific query or full data from place to another.
 - Added Functionality to remove secure from specifc files and store them into their original files.
+- Fixed Bugs in update and updateMany functionality for JSON and YAML adapter.
+- Fixed logger became optional.
+- Updated SecureData functionality for SQL.
+- Improved Schema to have ability to make trees schema.
 
 ## Version 1.1
 

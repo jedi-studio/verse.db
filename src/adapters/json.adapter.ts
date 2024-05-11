@@ -14,6 +14,7 @@ import {
 import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 import { decodeJSON, encodeJSON } from "../core/secureData";
 import { nearbyOptions, SecureSystem } from "../types/connect";
+import { error } from "console";
 
 export class jsonAdapter extends EventEmitter implements versedbAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
@@ -175,7 +176,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       if (this.secure.enable) {
         data = await encodeJSON(currentData, this.secure.secret);
       } else {
-        data = JSON.stringify(currentData);
+        data = JSON.stringify(currentData, null, 2);
       }
 
       fs.writeFileSync(dataname, data);
@@ -550,7 +551,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       if (this.secure.enable) {
         data = await encodeJSON(currentData, this.secure.secret);
       } else {
-        data = JSON.stringify(currentData);
+        data = JSON.stringify(currentData, null, 2);
       }
 
       fs.writeFileSync(dataname, data);
@@ -587,644 +588,1549 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
     upsert: boolean = false
   ): Promise<AdapterResults> {
     try {
-      if (!query) {
-        logError({
-          content: `Search query is not provided`,
-          devLogs: this.devLogs,
-        });
-        return {
-          acknowledged: false,
-          errorMessage: `Search query is not provided`,
-          results: null,
-        };
-      }
-
-      if (!updateQuery) {
-        logError({
-          content: `Update query is not provided`,
-          devLogs: this.devLogs,
-        });
-        return {
-          acknowledged: false,
-          errorMessage: `Update query is not provided`,
-          results: null,
-        };
-      }
-
-      const loaded: any = (await this.load(dataname)) || [];
-      let currentData: any = loaded.results;
-
-      let updatedCount = 0;
-      let updatedDocument: any = null;
-      let matchFound = false;
-
-      currentData.some((item: any) => {
-        let match = true;
-
-        for (const key of Object.keys(query)) {
-          if (typeof query[key] === "object") {
-            const operator = Object.keys(query[key])[0];
-            const value = query[key][operator];
-            switch (operator) {
-              case "$gt":
-                if (!(item[key] > value)) {
-                  match = false;
-                }
-                break;
-              case "$lt":
-                if (!(item[key] < value)) {
-                  match = false;
-                }
-                break;
-              case "$or":
-                if (
-                  !query[key].some((condition: any) => item[key] === condition)
-                ) {
-                  match = false;
-                }
-                break;
-              default:
-                if (item[key] !== value) {
-                  match = false;
-                }
-            }
-          } else {
-            if (item[key] !== query[key]) {
-              match = false;
-              break;
-            }
-          }
+        if (!query) {
+            return {
+                acknowledged: false,
+                errorMessage: `Search query is not provided`,
+                results: null,
+            };
         }
 
-        if (match) {
-          for (const key of Object.keys(updateQuery)) {
-            if (key.startsWith("$")) {
-              switch (key) {
-                case "$set":
-                  Object.assign(item, updateQuery.$set);
-                  break;
-                case "$unset":
-                  for (const field of Object.keys(updateQuery.$unset)) {
-                    delete item[field];
-                  }
-                  break;
-                case "$inc":
-                  for (const field of Object.keys(updateQuery.$inc)) {
-                    item[field] = (item[field] || 0) + updateQuery.$inc[field];
-                  }
-                  break;
-                case "$currentDate":
-                  for (const field of Object.keys(updateQuery.$currentDate)) {
-                    item[field] = new Date();
-                  }
-                  break;
-                case "$push":
-                  for (const field of Object.keys(updateQuery.$push)) {
-                    if (!item[field]) {
-                      item[field] = [];
+        if (!updateQuery) {
+            return {
+                acknowledged: false,
+                errorMessage: `Update query is not provided`,
+                results: null,
+            };
+        }
+
+        let currentData: any = (await this.load(dataname)).results;
+        let updatedCount = 0;
+        let updatedDocument: any = null;
+
+        const queryResults = currentData.filter((item: any) => {
+          for (const key of Object.keys(query)) {
+            const queryValue = query[key];
+            const itemValue = item[key];
+        
+            if (typeof queryValue === "object") {
+                for (const operator of Object.keys(queryValue)) {
+                    switch (operator) {
+                        case "$eq":
+                            if (itemValue !== queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$ne":
+                            if (itemValue === queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$gte":
+                            if (itemValue < queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$lte":
+                            if (itemValue > queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$in":
+                            if (!queryValue[operator].includes(itemValue)) {
+                                return false;
+                            }
+                            break;
+                        case "$nin":
+                            if (queryValue[operator].includes(itemValue)) {
+                                return false;
+                            }
+                            break;
+                        default:
+                            throw new Error(`Unsupported operator: ${operator}`);
                     }
-                    if (Array.isArray(updateQuery.$push[field])) {
-                      item[field].push(...updateQuery.$push[field]);
-                    } else {
-                      item[field].push(updateQuery.$push[field]);
-                    }
-                  }
-                  break;
-                case "$pull":
-                  for (const field of Object.keys(updateQuery.$pull)) {
-                    if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => val !== updateQuery.$pull[field]
-                      );
-                    }
-                  }
-                  break;
-                case "$position":
-                  for (const field of Object.keys(updateQuery.$position)) {
-                    const { index, element } = updateQuery.$position[field];
-                    if (Array.isArray(item[field])) {
-                      item[field].splice(index, 0, element);
-                    }
-                  }
-                  break;
-                case "$max":
-                  for (const field of Object.keys(updateQuery.$max)) {
-                    item[field] = Math.max(
-                      item[field] || Number.NEGATIVE_INFINITY,
-                      updateQuery.$max[field]
-                    );
-                  }
-                  break;
-                case "$min":
-                  for (const field of Object.keys(updateQuery.$min)) {
-                    item[field] = Math.min(
-                      item[field] || Number.POSITIVE_INFINITY,
-                      updateQuery.$min[field]
-                    );
-                  }
-                  break;
-                case "$lt":
-                  for (const field of Object.keys(updateQuery.$lt)) {
-                    if (item[field] < updateQuery.$lt[field]) {
-                      item[field] = updateQuery.$lt[field];
-                    }
-                  }
-                  break;
-                case "$gt":
-                  for (const field of Object.keys(updateQuery.$gt)) {
-                    if (item[field] > updateQuery.$gt[field]) {
-                      item[field] = updateQuery.$gt[field];
-                    }
-                  }
-                  break;
-                case "$or":
-                  const orConditions = updateQuery.$or;
-                  const orMatch = orConditions.some((condition: any) => {
-                    for (const field of Object.keys(condition)) {
-                      if (item[field] !== condition[field]) {
-                        return false;
-                      }
-                    }
-                    return true;
-                  });
-                  if (orMatch) {
-                    Object.assign(item, updateQuery.$set);
-                  }
-                  break;
-                case "$addToSet":
-                  for (const field of Object.keys(updateQuery.$addToSet)) {
-                    if (!item[field]) {
-                      item[field] = [];
-                    }
-                    if (!item[field].includes(updateQuery.$addToSet[field])) {
-                      item[field].push(updateQuery.$addToSet[field]);
-                    }
-                  }
-                  break;
-                case "$pushAll":
-                  for (const field of Object.keys(updateQuery.$pushAll)) {
-                    if (!item[field]) {
-                      item[field] = [];
-                    }
-                    item[field].push(...updateQuery.$pushAll[field]);
-                  }
-                  break;
-                case "$pop":
-                  for (const field of Object.keys(updateQuery.$pop)) {
-                    if (Array.isArray(item[field])) {
-                      if (updateQuery.$pop[field] === -1) {
-                        item[field].shift();
-                      } else if (updateQuery.$pop[field] === 1) {
-                        item[field].pop();
-                      }
-                    }
-                  }
-                  break;
-                case "$pullAll":
-                  for (const field of Object.keys(updateQuery.$pullAll)) {
-                    if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => !updateQuery.$pullAll[field].includes(val)
-                      );
-                    }
-                  }
-                  break;
-                case "$rename":
-                  for (const field of Object.keys(updateQuery.$rename)) {
-                    item[updateQuery.$rename[field]] = item[field];
-                    delete item[field];
-                  }
-                  break;
-                case "$bit":
-                  for (const field of Object.keys(updateQuery.$bit)) {
-                    if (typeof item[field] === "number") {
-                      item[field] = item[field] & updateQuery.$bit[field];
-                    }
-                  }
-                  break;
-                case "$mul":
-                  for (const field of Object.keys(updateQuery.$mul)) {
-                    item[field] = (item[field] || 0) * updateQuery.$mul[field];
-                  }
-                  break;
-                case "$each":
-                  if (updateQuery.$push) {
-                    for (const field of Object.keys(updateQuery.$push)) {
-                      const elementsToAdd = updateQuery.$push[field].$each;
-                      if (!item[field]) {
-                        item[field] = [];
-                      }
-                      if (Array.isArray(elementsToAdd)) {
-                        item[field].push(...elementsToAdd);
-                      }
-                    }
-                  } else if (updateQuery.$addToSet) {
-                    for (const field of Object.keys(updateQuery.$addToSet)) {
-                      const elementsToAdd = updateQuery.$addToSet[field].$each;
-                      if (!item[field]) {
-                        item[field] = [];
-                      }
-                      if (Array.isArray(elementsToAdd)) {
-                        elementsToAdd.forEach((element: any) => {
-                          if (!item[field].includes(element)) {
-                            item[field].push(element);
-                          }
-                        });
-                      }
-                    }
-                  }
-                  break;
-                case "$slice":
-                  for (const field of Object.keys(updateQuery.$slice)) {
-                    if (Array.isArray(item[field])) {
-                      item[field] = item[field].slice(
-                        updateQuery.$slice[field]
-                      );
-                    }
-                  }
-                  break;
-                case "$sort":
-                  for (const field of Object.keys(updateQuery.$sort)) {
-                    if (Array.isArray(item[field])) {
-                      item[field].sort((a: any, b: any) => a - b);
-                    }
-                  }
-                  break;
-                default:
-                  logError({
-                    content: `Unsupported operator: ${key}`,
-                    devLogs: this.devLogs,
-                    throwErr: true,
-                  });
-              }
+                }
             } else {
-              item[key] = updateQuery[key];
+                if (itemValue !== queryValue) {
+                    return false;
+                }
             }
-          }
-
-          updatedDocument = item;
-          updatedCount++;
-          matchFound = true;
-
-          return true;
         }
-      });
+        return true;        
+    });
+        if (queryResults.length === 0) {
+            if (!upsert) {
+                return {
+                    acknowledged: true,
+                    message: `No document found matching the search query.`,
+                    results: null,
+                };
+            }
+        } else {
+            for (const item of queryResults) {
+                for (const key of Object.keys(updateQuery)) {
+                    switch (key) {
+                      case "$set":
+                        Object.assign(item, updateQuery.$set);
+                        break;
+                        case "$unset":
+                          for (const field of Object.keys(updateQuery.$unset)) {
+                              let nestedObj = item;
+                              const nestedKeys = field.split('.');
+                              for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                  const key = nestedKeys[i];
+                                  if (key.includes('[')) {
+                                      const arrayKey = key.substring(0, key.indexOf('['));
+                                      const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                      if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                          throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                      }
+                                      nestedObj = nestedObj[arrayKey][index];
+                                  } else {
+                                      if (!nestedObj[key]) {
+                                          throw new Error(`The key ${key} doesn't exist.`);
+                                      }
+                                      nestedObj = nestedObj[key];
+                                  }
+                              }
+                              const lastKey = nestedKeys[nestedKeys.length - 1];
+                              if (nestedObj.hasOwnProperty(lastKey)) {
+                                  delete nestedObj[lastKey];
+                              }
+                          }
+                          break;                                                                 
+                          case "$inc":
+                          for (const field of Object.keys(updateQuery.$inc)) {
+                              const fieldObject = updateQuery.$inc[field];
+                              let target = item[field];
+                              if (!target) {
+                                  target = Array.isArray(item) ? [] : {};
+                                  item[field] = target;
+                              }
+                              if (typeof target === 'number') {
+                                  if (typeof fieldObject !== 'number') {
+                                      throw new Error(`Value to increment in field ${field} is not a number.`);
+                                  }
+                                  item[field] += fieldObject;
+                              } else if (Array.isArray(target)) {
+                                  if (!fieldObject || typeof fieldObject !== 'number') {
+                                      throw new Error(`Value to increment in array field ${field} is not provided or not a number.`);
+                                  }
+                                  for (let i = 0; i < target.length; i++) {
+                                      if (typeof target[i] !== 'number') {
+                                          throw new Error(`Element at index ${i} in array field ${field} is not a number.`);
+                                      }
+                                      target[i] += fieldObject;
+                                  }
+                              } else if (typeof target === 'object') {
+                                  for (const subField of Object.keys(fieldObject)) {
+                                      if (!target[subField]) {
+                                          target[subField] = fieldObject[subField];
+                                      } else if (Array.isArray(target[subField])) {
+                                          if (!fieldObject[subField] || typeof fieldObject[subField] !== 'number') {
+                                              throw new Error(`Value to increment in array field ${subField} nested under ${field} is not provided or not a number.`);
+                                          }
+                                          for (let i = 0; i < target[subField].length; i++) {
+                                              if (typeof target[subField][i] !== 'number') {
+                                                  throw new Error(`Element at index ${i} in array field ${subField} nested under ${field} is not a number.`);
+                                              }
+                                              target[subField][i] += fieldObject[subField];
+                                          }
+                                      } else if (typeof target[subField] === 'object') {
+                                          for (const prop of Object.keys(fieldObject[subField])) {
+                                              if (!target[subField][prop]) {
+                                                  target[subField][prop] = fieldObject[subField][prop];
+                                              } else if (Array.isArray(target[subField][prop])) {
+                                                  if (!fieldObject[subField][prop] || typeof fieldObject[subField][prop] !== 'number') {
+                                                      throw new Error(`Value to increment in array field ${prop} nested under ${subField} nested under ${field} is not provided or not a number.`);
+                                                  }
+                                                  for (let i = 0; i < target[subField][prop].length; i++) {
+                                                      if (typeof target[subField][prop][i] !== 'number') {
+                                                          throw new Error(`Element at index ${i} in array field ${prop} nested under ${subField} nested under ${field} is not a number.`);
+                                                      }
+                                                      target[subField][prop][i] += fieldObject[subField][prop];
+                                                  }
+                                              } else {
+                                                  if (typeof fieldObject[subField][prop] !== 'number') {
+                                                      throw new Error(`Value to increment in field ${prop} nested under ${subField} nested under ${field} is not a number.`);
+                                                  }
+                                                  target[subField][prop] += fieldObject[subField][prop];
+                                              }
+                                          }
+                                      } else {
+                                          if (typeof fieldObject[subField] !== 'number') {
+                                              throw new Error(`Value to increment in field ${subField} nested under ${field} is not a number.`);
+                                          }
+                                          target[subField] += fieldObject[subField];
+                                      }
+                                  }
+                              }
+                          }
+                          break;
+                          case "$push":
+                            for (const field of Object.keys(updateQuery.$push)) {
+                                const nestedKey = field;
+                                const value = updateQuery.$push[field];
+                                const nestedKeys = nestedKey.split('.');
+                                let nestedObj = item;
+                                for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                    const key = nestedKeys[i];
+                                    if (key.includes('[')) {
+                                        const indexStart = key.indexOf('[');
+                                        const indexEnd = key.indexOf(']');
+                                        const arrayKey = key.substring(0, indexStart);
+                                        const index = parseInt(key.substring(indexStart + 1, indexEnd));
+                                        if (!nestedObj[arrayKey]) {
+                                            throw new Error(`Nested key ${arrayKey} not found in object`);
+                                        }
+                                        if (!Array.isArray(nestedObj[arrayKey])) {
+                                            throw new Error(`Property ${arrayKey} is not an array`);
+                                        }
+                                        if (!nestedObj[arrayKey][index]) {
+                                            throw new Error(`Index ${index} not found in array ${arrayKey}`);
+                                        }
+                                        nestedObj = nestedObj[arrayKey][index];
+                                    } else {
+                                        if (!nestedObj[key]) {
+                                            throw new Error(`Nested key ${key} not found in object`);
+                                        }
+                                        nestedObj = nestedObj[key];
+                                    }
+                                }
+                                const lastKey = nestedKeys[nestedKeys.length - 1];
+                                if (!Array.isArray(nestedObj[lastKey])) {
+                                    throw new Error(`Property ${nestedKey} is not an array`);
+                                }
+                                nestedObj[lastKey].push(value);
+                            }
+                            break;
+                            case "$pushAll":
+                              for (const field of Object.keys(updateQuery.$pushAll)) {
+                                  const nestedKey = field;
+                                  const values = updateQuery.$pushAll[field];
+                                  const nestedKeys = nestedKey.split('.');
+                                  let nestedObj = item;
+                                  for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                      const key = nestedKeys[i];
+                                      if (key.includes('[')) {
+                                          const indexStart = key.indexOf('[');
+                                          const indexEnd = key.indexOf(']');
+                                          const arrayKey = key.substring(0, indexStart);
+                                          const index = parseInt(key.substring(indexStart + 1, indexEnd));
+                                          if (!nestedObj[arrayKey]) {
+                                              throw new Error(`Nested key ${arrayKey} not found in object`);
+                                          }
+                                          if (!Array.isArray(nestedObj[arrayKey])) {
+                                              throw new Error(`Property ${arrayKey} is not an array`);
+                                          }
+                                          if (!nestedObj[arrayKey][index]) {
+                                              throw new Error(`Index ${index} not found in array ${arrayKey}`);
+                                          }
+                                          nestedObj = nestedObj[arrayKey][index];
+                                      } else {
+                                          if (!nestedObj[key]) {
+                                              throw new Error(`Nested key ${key} not found in object`);
+                                          }
+                                          nestedObj = nestedObj[key];
+                                      }
+                                  }
+                                  const lastKey = nestedKeys[nestedKeys.length - 1];
+                                  if (!Array.isArray(nestedObj[lastKey])) {
+                                      throw new Error(`Property ${nestedKey} is not an array`);
+                                  }
+                                  if (!Array.isArray(values)) {
+                                      throw new Error(`Values provided for field ${nestedKey} are not an array`);
+                                  }
+                                  nestedObj[lastKey].push(...values);
+                              }
+                              break;
+                              case "$pull":
+                                for (const field of Object.keys(updateQuery.$pull)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValue = updateQuery.$pull[field];
+                                    const indexToRemove = nestedObj[lastKey].findIndex((value: any) => value === pullValue);
+                                    if (indexToRemove !== -1) {
+                                        nestedObj[lastKey].splice(indexToRemove, 1); 
+                                    }
+                                }
+                                break;
+                                case "$pullAll":
+                                for (const field of Object.keys(updateQuery.$pullAll)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValues = updateQuery.$pullAll[field];
+                                    nestedObj[lastKey] = nestedObj[lastKey].filter((value: any) => !pullValues.includes(value));
+                                }
+                              break;
+                              case "$pullMulti":
+                                for (const field of Object.keys(updateQuery.$pullMulti)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValues = updateQuery.$pullMulti[field];
+                                    for (const pullValue of pullValues) {
+                                        const indexToRemove = nestedObj[lastKey].findIndex((value: any) => value === pullValue);
+                                        if (indexToRemove !== -1) {
+                                            nestedObj[lastKey].splice(indexToRemove, 1);
+                                        }
+                                    }
+                                }
+                                break;                            
+                                case "$pullAllMulti":
+                                for (const field of Object.keys(updateQuery.$pullAllMulti)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValues = updateQuery.$pullAllMulti[field];
+                                    nestedObj[lastKey] = nestedObj[lastKey].filter((value: any) => !pullValues.includes(value));
+                                }
+                              break;
+                              case "$pop":
+                                for (const field of Object.keys(updateQuery.$pop)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const popValue = updateQuery.$pop[field];
+                                    if (popValue === 1) {
+                                        nestedObj[lastKey].pop();
+                                    } else if (popValue === -1) {
+                                        nestedObj[lastKey].shift();
+                                    } else {
+                                        throw new Error(`Invalid value ${popValue} for $pop operation.`);
+                                    }
+                                }
+                              break;
+                              case "$addToSet":
+                                for (const field of Object.keys(updateQuery.$addToSet)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const addToSetValue = updateQuery.$addToSet[field];
+                                    if (!nestedObj[lastKey].includes(addToSetValue)) {
+                                        nestedObj[lastKey].push(addToSetValue);
+                                    }
+                                }
+                              break;
+                              case "$addToSet":
+                                for (const field of Object.keys(updateQuery.$addToSet)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const addToSetValue = updateQuery.$addToSet[field];
+                                    if (!nestedObj[lastKey].includes(addToSetValue)) {
+                                        nestedObj[lastKey].push(addToSetValue);
+                                    }
+                                }
+                              break;
+                              case "$rename":
+                                for (const field of Object.keys(updateQuery.$rename)) {
+                                    const renamePath = field.split('.');
+                                    let currentObj = item;
+                                    let parentObj = null;
+                                    let index = null;
+                                    for (let i = 0; i < renamePath.length; i++) {
+                                        const key = renamePath[i];
+                                        if (key.includes('[')) {
+                                            const [arrayKey, arrayIndex] = key.split('[');
+                                            index = parseInt(arrayIndex.replace(']', ''));
+                                            if (!currentObj[arrayKey] || !Array.isArray(currentObj[arrayKey])) {
+                                                throw new Error(`Key "${arrayKey}" is not an array or doesn't exist.`);
+                                            }
+                                            parentObj = currentObj;
+                                            currentObj = currentObj[arrayKey][index];
+                                        } else {
+                                            if (!currentObj.hasOwnProperty(key)) {
+                                                throw new Error(`Key "${key}" not found in object.`);
+                                            }
+                                            parentObj = currentObj;
+                                            currentObj = currentObj[key];
+                                        }
+                                    }
+                                    if (parentObj !== null && index !== null && parentObj.hasOwnProperty(renamePath[renamePath.length - 1])) {
+                                        const newKey = updateQuery.$rename[field];
+                                        parentObj[newKey] = parentObj[renamePath[renamePath.length - 1]];
+                                        delete parentObj[renamePath[renamePath.length - 1]];
+                                    } else {
+                                        throw new Error(`Invalid path "${field}" for renaming.`);
+                                    }
+                                }
+                                break;
+                                case "$currentDate":
+                                for (const field of Object.keys(updateQuery.$currentDate)) {
+                                    const currentDateValue = updateQuery.$currentDate[field];
+                                    if (currentDateValue === true || typeof currentDateValue === 'object') {
+                                        const currentDate = new Date();
+                                        if (typeof currentDateValue === 'object') {
+                                            if (currentDateValue.$type === 'timestamp') {
+                                                item[field] = currentDate.getTime();
+                                            } else if (currentDateValue.$type === 'date') {
+                                              item[field] = currentDate;
+                                            } else {
+                                                throw new Error(`Invalid type for $currentDate: ${currentDateValue.$type}`);
+                                            }
+                                        } else {
+                                          item[field] = currentDate;
+                                        }
+                                    } else {
+                                        throw new Error(`Invalid value for $currentDate: ${currentDateValue}`);
+                                    }
+                                }
+                            break;
+                            case "$bit":
+                              for (const field of Object.keys(updateQuery.$bit)) {
+                                  const bitUpdate = updateQuery.$bit[field];
+                                  const nestedKeys = field.split('.');
+                                  let nestedObj = item;
+                                  for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                      const key = nestedKeys[i];
+                                      if (key.includes('[')) {
+                                          const arrayKey = key.substring(0, key.indexOf('['));
+                                          const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                          if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                              throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                          }
+                                          nestedObj = nestedObj[arrayKey][index];
+                                      } else {
+                                          if (!nestedObj[key]) {
+                                              throw new Error(`The key ${key} doesn't exist.`);
+                                          }
+                                          nestedObj = nestedObj[key];
+                                      }
+                                  }
+                                  const lastKey = nestedKeys[nestedKeys.length - 1];
+                                  if (typeof nestedObj[lastKey] !== 'number') {
+                                      throw new Error(`The field ${field} is not a number.`);
+                                  }
+                                  const { operation, value } = bitUpdate;
+                                  if (operation === 'and') {
+                                      nestedObj[lastKey] &= value;
+                                  } else if (operation === 'or') {
+                                      nestedObj[lastKey] |= value;
+                                  } else if (operation === 'xor') {
+                                      nestedObj[lastKey] ^= value;
+                                  } else {
+                                      throw new Error(`Invalid bitwise operation: ${operation}`);
+                                  }
+                              }
+                              break;
+                              case "$pullRange":
+                                for (const field of Object.keys(updateQuery.$pullRange)) {
+                                    const range = updateQuery.$pullRange[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const { min, max } = range;
+                                    nestedObj[lastKey] = nestedObj[lastKey].filter((value: any) => value < min || value > max);
+                                }
+                                break;                                                       
+                                case "$mul":
+                                  for (const field of Object.keys(updateQuery.$mul)) {
+                                    const mulValue = updateQuery.$mul[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                      const key = nestedKeys[i];
+                                      if (key.includes('[')) {
+                                        const arrayKey = key.substring(0, key.indexOf('['));
+                                        const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                        if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                          throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                        }
+                                        nestedObj = nestedObj[arrayKey][index];
+                                      } else {
+                                        if (!nestedObj[key]) {
+                                          throw new Error(`The key ${key} doesn't exist.`);
+                                        }
+                                        nestedObj = nestedObj[key];
+                                      }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (Array.isArray(nestedObj[lastKey])) {
+                                      nestedObj[lastKey] = nestedObj[lastKey].map((value: number) => value * mulValue);
+                                    } else if (typeof nestedObj[lastKey] === 'number') {
+                                      nestedObj[lastKey] *= mulValue;
+                                    } else {
+                                      throw new Error(`The field ${field} is not a number or an array.`);
+                                    }
+                                  }
+                              break;                                  
+                              case "$max":
+                                for (const field of Object.keys(updateQuery.$max)) {
+                                    const maxValue = updateQuery.$max[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (typeof nestedObj[lastKey] !== 'number') {
+                                        throw new Error(`The field ${field} is not a number.`);
+                                    }
+                                    nestedObj[lastKey] = Math.max(nestedObj[lastKey], maxValue);
+                                }
+                              break;       
+                              case "$min":
+                                for (const field of Object.keys(updateQuery.$min)) {
+                                    const minValue = updateQuery.$min[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (typeof nestedObj[lastKey] !== 'number') {
+                                        throw new Error(`The field ${field} is not a number.`);
+                                    }
+                                    nestedObj[lastKey] = Math.min(nestedObj[lastKey], minValue);
+                                }
+                              break;   
+                              case "$addToSetMulti":
+                                for (const field of Object.keys(updateQuery.$addToSetMulti)) {
+                                    const valuesToAdd = updateQuery.$addToSetMulti[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    for (const valueToAdd of valuesToAdd) {
+                                        if (!nestedObj[lastKey].includes(valueToAdd)) {
+                                            nestedObj[lastKey].push(valueToAdd);
+                                        }
+                                    }
+                                }
+                              break;                                                                                                                                                                                                                                                                                                        
+                            }
+                }
+                updatedDocument = item;
+                updatedCount++;
+            }
+        }
 
-      if (!matchFound && upsert) {
-        const newData = { _id: randomUUID(), ...query, ...updateQuery.$set };
-        currentData.push(newData);
-        updatedDocument = newData;
-        updatedCount++;
-      }
+        if (upsert && queryResults.length === 0) {
+            const newData = { _id: randomUUID(), ...query, ...updateQuery.$set };
+            currentData.push(newData);
+            updatedDocument = newData;
+            updatedCount++;
+        }
 
-      if (!matchFound && !upsert) {
+        let data: any;
+
+        if (this.secure.enable) {
+          data = await encodeJSON(currentData, this.secure.secret);
+        } else {
+          data = JSON.stringify(currentData, null, 2);
+        }
+  
+        fs.writeFileSync(dataname, data);
+
+        logSuccess({
+          content: `${updatedCount} document(s) updated`,
+          devLogs: this.devLogs,
+        });
+  
+        this.emit("dataUpdated", updatedDocument);
+
         return {
-          acknowledged: true,
-          errorMessage: `No document found matching the search query.`,
-          results: null,
+            acknowledged: true,
+            message: `${updatedCount} document(s) updated successfully.`,
+            results: updatedDocument,
         };
-      }
-
-      let data: any;
-
-      if (this.secure.enable) {
-        data = await encodeJSON(currentData, this.secure.secret);
-      } else {
-        data = JSON.stringify(currentData);
-      }
-
-      fs.writeFileSync(dataname, data);
-
-      logSuccess({
-        content: "Data has been updated",
-        devLogs: this.devLogs,
-      });
-
-      this.emit("dataUpdated", updatedDocument);
-
-      return {
-        acknowledged: true,
-        message: `${updatedCount} document(s) updated successfully.`,
-        results: updatedDocument,
-      };
     } catch (e: any) {
       logError({
         content: e.message,
         devLogs: this.devLogs,
       });
-      return {
-        acknowledged: false,
-        errorMessage: `${e.message}`,
-        results: null,
-      };
+        return {
+            acknowledged: false,
+            errorMessage: e.message,
+            results: null,
+        };
     }
   }
 
   async updateMany(
-    dataname: string,
+    dataName: string,
     query: any,
-    updateQuery: any
-  ): Promise<AdapterResults> {
+    updateQuery: any,
+    upsert: boolean = false
+): Promise<AdapterResults> {
     try {
-      if (!query) {
-        logError({
-          content: `Search query is not provided`,
-          devLogs: this.devLogs,
-        });
-        return {
-          acknowledged: false,
-          errorMessage: `Search query is not provided`,
-          results: null,
-        };
-      }
-
-      if (!updateQuery) {
-        logError({
-          content: `Update query is not provided`,
-          devLogs: this.devLogs,
-        });
-        return {
-          acknowledged: false,
-          errorMessage: `Update query is not provided`,
-          results: null,
-        };
-      }
-
-      const loaded: any = (await this.load(dataname)) || [];
-      let currentData: any = loaded.results;
-
-      let updatedCount = 0;
-      let updatedDocuments: any[] = [];
-
-      currentData.forEach((item: any) => {
-        let match = true;
-
-        for (const key of Object.keys(query)) {
-          if (typeof query[key] === "object") {
-            const operator = Object.keys(query[key])[0];
-            const value = query[key][operator];
-            switch (operator) {
-              case "$gt":
-                if (!(item[key] > value)) {
-                  match = false;
-                }
-                break;
-              case "$lt":
-                if (!(item[key] < value)) {
-                  match = false;
-                }
-                break;
-              case "$or":
-                if (
-                  !query[key].some((condition: any) => item[key] === condition)
-                ) {
-                  match = false;
-                }
-                break;
-              default:
-                if (item[key] !== value) {
-                  match = false;
-                }
-            }
-          } else {
-            if (item[key] !== query[key]) {
-              match = false;
-              break;
-            }
-          }
+        if (!query) {
+            return {
+                acknowledged: false,
+                errorMessage: `Search query is not provided`,
+                results: null,
+            };
         }
 
-        if (match) {
-          for (const key of Object.keys(updateQuery)) {
-            if (key.startsWith("$")) {
-              switch (key) {
-                case "$set":
-                  Object.assign(item, updateQuery.$set);
-                  break;
-                case "$unset":
-                  for (const field of Object.keys(updateQuery.$unset)) {
-                    delete item[field];
-                  }
-                  break;
-                case "$inc":
-                  for (const field of Object.keys(updateQuery.$inc)) {
-                    item[field] = (item[field] || 0) + updateQuery.$inc[field];
-                  }
-                  break;
-                case "$currentDate":
-                  for (const field of Object.keys(updateQuery.$currentDate)) {
-                    item[field] = new Date();
-                  }
-                  break;
-                case "$push":
-                  for (const field of Object.keys(updateQuery.$push)) {
-                    if (!item[field]) {
-                      item[field] = [];
+        if (!updateQuery) {
+            return {
+                acknowledged: false,
+                errorMessage: `Update query is not provided`,
+                results: null,
+            };
+        }
+
+        let currentData: any = (await this.load(dataName)).results;
+        let updatedCount = 0;
+        let updatedDocuments: any[] = [];
+        let queryResults: any[] = [];
+
+        currentData.forEach((item: any) => {
+            let matchesQuery = true;
+
+            for (const key of Object.keys(query)) {
+                const queryValue = query[key];
+                const itemValue = item[key];
+
+                if (typeof queryValue === "object") {
+                    for (const operator of Object.keys(queryValue)) {
+                        switch (operator) {
+                          case "$eq":
+                            if (itemValue !== queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$ne":
+                            if (itemValue === queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$gte":
+                            if (itemValue < queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$lte":
+                            if (itemValue > queryValue[operator]) {
+                                return false;
+                            }
+                            break;
+                        case "$in":
+                            if (!queryValue[operator].includes(itemValue)) {
+                                return false;
+                            }
+                            break;
+                        case "$nin":
+                            if (queryValue[operator].includes(itemValue)) {
+                                return false;
+                            }
+                            break;
+                        default:
+                            throw new Error(`Unsupported operator: ${operator}`);
+                        }
                     }
-                    if (Array.isArray(updateQuery.$push[field])) {
-                      item[field].push(...updateQuery.$push[field]);
-                    } else {
-                      item[field].push(updateQuery.$push[field]);
+                } else {
+                    if (itemValue !== queryValue) {
+                        matchesQuery = false;
                     }
-                  }
-                  break;
-                case "$pull":
-                  for (const field of Object.keys(updateQuery.$pull)) {
-                    if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => val !== updateQuery.$pull[field]
-                      );
-                    }
-                  }
-                  break;
-                case "$position":
-                  for (const field of Object.keys(updateQuery.$position)) {
-                    const { index, element } = updateQuery.$position[field];
-                    if (Array.isArray(item[field])) {
-                      item[field].splice(index, 0, element);
-                    }
-                  }
-                  break;
-                case "$max":
-                  for (const field of Object.keys(updateQuery.$max)) {
-                    item[field] = Math.max(
-                      item[field] || Number.NEGATIVE_INFINITY,
-                      updateQuery.$max[field]
-                    );
-                  }
-                  break;
-                case "$min":
-                  for (const field of Object.keys(updateQuery.$min)) {
-                    item[field] = Math.min(
-                      item[field] || Number.POSITIVE_INFINITY,
-                      updateQuery.$min[field]
-                    );
-                  }
-                  break;
-                case "$or":
-                  const orConditions = updateQuery.$or;
-                  const orMatch = orConditions.some((condition: any) => {
-                    for (const field of Object.keys(condition)) {
-                      if (item[field] !== condition[field]) {
-                        return false;
-                      }
-                    }
-                    return true;
-                  });
-                  if (orMatch) {
-                    Object.assign(item, updateQuery.$set);
-                  }
-                  break;
-                case "$addToSet":
-                  for (const field of Object.keys(updateQuery.$addToSet)) {
-                    if (!item[field]) {
-                      item[field] = [];
-                    }
-                    if (!item[field].includes(updateQuery.$addToSet[field])) {
-                      item[field].push(updateQuery.$addToSet[field]);
-                    }
-                  }
-                  break;
-                case "$pushAll":
-                  for (const field of Object.keys(updateQuery.$pushAll)) {
-                    if (!item[field]) {
-                      item[field] = [];
-                    }
-                    item[field].push(...updateQuery.$pushAll[field]);
-                  }
-                  break;
-                case "$pop":
-                  for (const field of Object.keys(updateQuery.$pop)) {
-                    if (Array.isArray(item[field])) {
-                      if (updateQuery.$pop[field] === -1) {
-                        item[field].shift();
-                      } else if (updateQuery.$pop[field] === 1) {
-                        item[field].pop();
-                      }
-                    }
-                  }
-                  break;
-                case "$pullAll":
-                  for (const field of Object.keys(updateQuery.$pullAll)) {
-                    if (Array.isArray(item[field])) {
-                      item[field] = item[field].filter(
-                        (val: any) => !updateQuery.$pullAll[field].includes(val)
-                      );
-                    }
-                  }
-                  break;
-                case "$rename":
-                  for (const field of Object.keys(updateQuery.$rename)) {
-                    item[updateQuery.$rename[field]] = item[field];
-                    delete item[field];
-                  }
-                  break;
-                case "$bit":
-                  for (const field of Object.keys(updateQuery.$bit)) {
-                    if (typeof item[field] === "number") {
-                      item[field] = item[field] & updateQuery.$bit[field];
-                    }
-                  }
-                  break;
-                case "$mul":
-                  for (const field of Object.keys(updateQuery.$mul)) {
-                    item[field] = (item[field] || 0) * updateQuery.$mul[field];
-                  }
-                  break;
-                case "$each":
-                  if (updateQuery.$push) {
-                    for (const field of Object.keys(updateQuery.$push)) {
-                      const elementsToAdd = updateQuery.$push[field].$each;
-                      if (!item[field]) {
-                        item[field] = [];
-                      }
-                      if (Array.isArray(elementsToAdd)) {
-                        item[field].push(...elementsToAdd);
-                      }
-                    }
-                  } else if (updateQuery.$addToSet) {
-                    for (const field of Object.keys(updateQuery.$addToSet)) {
-                      const elementsToAdd = updateQuery.$addToSet[field].$each;
-                      if (!item[field]) {
-                        item[field] = [];
-                      }
-                      if (Array.isArray(elementsToAdd)) {
-                        elementsToAdd.forEach((element: any) => {
-                          if (!item[field].includes(element)) {
-                            item[field].push(element);
+                }
+            }
+
+            if (matchesQuery) {
+                queryResults.push(item);
+            }
+        });
+
+        if (queryResults.length === 0) {
+            if (!upsert) {
+                return {
+                    acknowledged: true,
+                    message: `No document found matching the search query.`,
+                    results: null,
+                };
+            }
+        } else {
+            for (const item of queryResults) {
+                for (const key of Object.keys(updateQuery)) {
+                    switch (key) {
+                      case "$set":
+                        Object.assign(item, updateQuery.$set);
+                        break;
+                        case "$unset":
+                          for (const field of Object.keys(updateQuery.$unset)) {
+                              let nestedObj = item;
+                              const nestedKeys = field.split('.');
+                              for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                  const key = nestedKeys[i];
+                                  if (key.includes('[')) {
+                                      const arrayKey = key.substring(0, key.indexOf('['));
+                                      const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                      if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                          throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                      }
+                                      nestedObj = nestedObj[arrayKey][index];
+                                  } else {
+                                      if (!nestedObj[key]) {
+                                          throw new Error(`The key ${key} doesn't exist.`);
+                                      }
+                                      nestedObj = nestedObj[key];
+                                  }
+                              }
+                              const lastKey = nestedKeys[nestedKeys.length - 1];
+                              if (nestedObj.hasOwnProperty(lastKey)) {
+                                  delete nestedObj[lastKey];
+                              }
                           }
-                        });
-                      }
+                          break;                                                                 
+                          case "$inc":
+                          for (const field of Object.keys(updateQuery.$inc)) {
+                              const fieldObject = updateQuery.$inc[field];
+                              let target = item[field];
+                              if (!target) {
+                                  target = Array.isArray(item) ? [] : {};
+                                  item[field] = target;
+                              }
+                              if (typeof target === 'number') {
+                                  if (typeof fieldObject !== 'number') {
+                                      throw new Error(`Value to increment in field ${field} is not a number.`);
+                                  }
+                                  item[field] += fieldObject;
+                              } else if (Array.isArray(target)) {
+                                  if (!fieldObject || typeof fieldObject !== 'number') {
+                                      throw new Error(`Value to increment in array field ${field} is not provided or not a number.`);
+                                  }
+                                  for (let i = 0; i < target.length; i++) {
+                                      if (typeof target[i] !== 'number') {
+                                          throw new Error(`Element at index ${i} in array field ${field} is not a number.`);
+                                      }
+                                      target[i] += fieldObject;
+                                  }
+                              } else if (typeof target === 'object') {
+                                  for (const subField of Object.keys(fieldObject)) {
+                                      if (!target[subField]) {
+                                          target[subField] = fieldObject[subField];
+                                      } else if (Array.isArray(target[subField])) {
+                                          if (!fieldObject[subField] || typeof fieldObject[subField] !== 'number') {
+                                              throw new Error(`Value to increment in array field ${subField} nested under ${field} is not provided or not a number.`);
+                                          }
+                                          for (let i = 0; i < target[subField].length; i++) {
+                                              if (typeof target[subField][i] !== 'number') {
+                                                  throw new Error(`Element at index ${i} in array field ${subField} nested under ${field} is not a number.`);
+                                              }
+                                              target[subField][i] += fieldObject[subField];
+                                          }
+                                      } else if (typeof target[subField] === 'object') {
+                                          for (const prop of Object.keys(fieldObject[subField])) {
+                                              if (!target[subField][prop]) {
+                                                  target[subField][prop] = fieldObject[subField][prop];
+                                              } else if (Array.isArray(target[subField][prop])) {
+                                                  if (!fieldObject[subField][prop] || typeof fieldObject[subField][prop] !== 'number') {
+                                                      throw new Error(`Value to increment in array field ${prop} nested under ${subField} nested under ${field} is not provided or not a number.`);
+                                                  }
+                                                  for (let i = 0; i < target[subField][prop].length; i++) {
+                                                      if (typeof target[subField][prop][i] !== 'number') {
+                                                          throw new Error(`Element at index ${i} in array field ${prop} nested under ${subField} nested under ${field} is not a number.`);
+                                                      }
+                                                      target[subField][prop][i] += fieldObject[subField][prop];
+                                                  }
+                                              } else {
+                                                  if (typeof fieldObject[subField][prop] !== 'number') {
+                                                      throw new Error(`Value to increment in field ${prop} nested under ${subField} nested under ${field} is not a number.`);
+                                                  }
+                                                  target[subField][prop] += fieldObject[subField][prop];
+                                              }
+                                          }
+                                      } else {
+                                          if (typeof fieldObject[subField] !== 'number') {
+                                              throw new Error(`Value to increment in field ${subField} nested under ${field} is not a number.`);
+                                          }
+                                          target[subField] += fieldObject[subField];
+                                      }
+                                  }
+                              }
+                          }
+                          break;
+                          case "$push":
+                            for (const field of Object.keys(updateQuery.$push)) {
+                                const nestedKey = field;
+                                const value = updateQuery.$push[field];
+                                const nestedKeys = nestedKey.split('.');
+                                let nestedObj = item;
+                                for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                    const key = nestedKeys[i];
+                                    if (key.includes('[')) {
+                                        const indexStart = key.indexOf('[');
+                                        const indexEnd = key.indexOf(']');
+                                        const arrayKey = key.substring(0, indexStart);
+                                        const index = parseInt(key.substring(indexStart + 1, indexEnd));
+                                        if (!nestedObj[arrayKey]) {
+                                            throw new Error(`Nested key ${arrayKey} not found in object`);
+                                        }
+                                        if (!Array.isArray(nestedObj[arrayKey])) {
+                                            throw new Error(`Property ${arrayKey} is not an array`);
+                                        }
+                                        if (!nestedObj[arrayKey][index]) {
+                                            throw new Error(`Index ${index} not found in array ${arrayKey}`);
+                                        }
+                                        nestedObj = nestedObj[arrayKey][index];
+                                    } else {
+                                        if (!nestedObj[key]) {
+                                            throw new Error(`Nested key ${key} not found in object`);
+                                        }
+                                        nestedObj = nestedObj[key];
+                                    }
+                                }
+                                const lastKey = nestedKeys[nestedKeys.length - 1];
+                                if (!Array.isArray(nestedObj[lastKey])) {
+                                    throw new Error(`Property ${nestedKey} is not an array`);
+                                }
+                                nestedObj[lastKey].push(value);
+                            }
+                            break;
+                            case "$pushAll":
+                              for (const field of Object.keys(updateQuery.$pushAll)) {
+                                  const nestedKey = field;
+                                  const values = updateQuery.$pushAll[field];
+                                  const nestedKeys = nestedKey.split('.');
+                                  let nestedObj = item;
+                                  for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                      const key = nestedKeys[i];
+                                      if (key.includes('[')) {
+                                          const indexStart = key.indexOf('[');
+                                          const indexEnd = key.indexOf(']');
+                                          const arrayKey = key.substring(0, indexStart);
+                                          const index = parseInt(key.substring(indexStart + 1, indexEnd));
+                                          if (!nestedObj[arrayKey]) {
+                                              throw new Error(`Nested key ${arrayKey} not found in object`);
+                                          }
+                                          if (!Array.isArray(nestedObj[arrayKey])) {
+                                              throw new Error(`Property ${arrayKey} is not an array`);
+                                          }
+                                          if (!nestedObj[arrayKey][index]) {
+                                              throw new Error(`Index ${index} not found in array ${arrayKey}`);
+                                          }
+                                          nestedObj = nestedObj[arrayKey][index];
+                                      } else {
+                                          if (!nestedObj[key]) {
+                                              throw new Error(`Nested key ${key} not found in object`);
+                                          }
+                                          nestedObj = nestedObj[key];
+                                      }
+                                  }
+                                  const lastKey = nestedKeys[nestedKeys.length - 1];
+                                  if (!Array.isArray(nestedObj[lastKey])) {
+                                      throw new Error(`Property ${nestedKey} is not an array`);
+                                  }
+                                  if (!Array.isArray(values)) {
+                                      throw new Error(`Values provided for field ${nestedKey} are not an array`);
+                                  }
+                                  nestedObj[lastKey].push(...values);
+                              }
+                              break;
+                              case "$pull":
+                                for (const field of Object.keys(updateQuery.$pull)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValue = updateQuery.$pull[field];
+                                    const indexToRemove = nestedObj[lastKey].findIndex((value: any) => value === pullValue);
+                                    if (indexToRemove !== -1) {
+                                        nestedObj[lastKey].splice(indexToRemove, 1); 
+                                    }
+                                }
+                                break;
+                                case "$pullAll":
+                                for (const field of Object.keys(updateQuery.$pullAll)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValues = updateQuery.$pullAll[field];
+                                    nestedObj[lastKey] = nestedObj[lastKey].filter((value: any) => !pullValues.includes(value));
+                                }
+                              break;
+                              case "$pullMulti":
+                                for (const field of Object.keys(updateQuery.$pullMulti)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValues = updateQuery.$pullMulti[field];
+                                    for (const pullValue of pullValues) {
+                                        const indexToRemove = nestedObj[lastKey].findIndex((value: any) => value === pullValue);
+                                        if (indexToRemove !== -1) {
+                                            nestedObj[lastKey].splice(indexToRemove, 1);
+                                        }
+                                    }
+                                }
+                                break;                            
+                                case "$pullAllMulti":
+                                for (const field of Object.keys(updateQuery.$pullAllMulti)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const pullValues = updateQuery.$pullAllMulti[field];
+                                    nestedObj[lastKey] = nestedObj[lastKey].filter((value: any) => !pullValues.includes(value));
+                                }
+                              break;
+                              case "$pop":
+                                for (const field of Object.keys(updateQuery.$pop)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const popValue = updateQuery.$pop[field];
+                                    if (popValue === 1) {
+                                        nestedObj[lastKey].pop();
+                                    } else if (popValue === -1) {
+                                        nestedObj[lastKey].shift();
+                                    } else {
+                                        throw new Error(`Invalid value ${popValue} for $pop operation.`);
+                                    }
+                                }
+                              break;
+                              case "$addToSet":
+                                for (const field of Object.keys(updateQuery.$addToSet)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const addToSetValue = updateQuery.$addToSet[field];
+                                    if (!nestedObj[lastKey].includes(addToSetValue)) {
+                                        nestedObj[lastKey].push(addToSetValue);
+                                    }
+                                }
+                              break;
+                              case "$addToSet":
+                                for (const field of Object.keys(updateQuery.$addToSet)) {
+                                    let nestedObj = item;
+                                    const nestedKeys = field.split('.');
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const addToSetValue = updateQuery.$addToSet[field];
+                                    if (!nestedObj[lastKey].includes(addToSetValue)) {
+                                        nestedObj[lastKey].push(addToSetValue);
+                                    }
+                                }
+                              break;
+                              case "$rename":
+                                for (const field of Object.keys(updateQuery.$rename)) {
+                                    const renamePath = field.split('.');
+                                    let currentObj = item;
+                                    let parentObj = null;
+                                    let index = null;
+                                    for (let i = 0; i < renamePath.length; i++) {
+                                        const key = renamePath[i];
+                                        if (key.includes('[')) {
+                                            const [arrayKey, arrayIndex] = key.split('[');
+                                            index = parseInt(arrayIndex.replace(']', ''));
+                                            if (!currentObj[arrayKey] || !Array.isArray(currentObj[arrayKey])) {
+                                                throw new Error(`Key "${arrayKey}" is not an array or doesn't exist.`);
+                                            }
+                                            parentObj = currentObj;
+                                            currentObj = currentObj[arrayKey][index];
+                                        } else {
+                                            if (!currentObj.hasOwnProperty(key)) {
+                                                throw new Error(`Key "${key}" not found in object.`);
+                                            }
+                                            parentObj = currentObj;
+                                            currentObj = currentObj[key];
+                                        }
+                                    }
+                                    if (parentObj !== null && index !== null && parentObj.hasOwnProperty(renamePath[renamePath.length - 1])) {
+                                        const newKey = updateQuery.$rename[field];
+                                        parentObj[newKey] = parentObj[renamePath[renamePath.length - 1]];
+                                        delete parentObj[renamePath[renamePath.length - 1]];
+                                    } else {
+                                        throw new Error(`Invalid path "${field}" for renaming.`);
+                                    }
+                                }
+                                break;
+                                case "$currentDate":
+                                for (const field of Object.keys(updateQuery.$currentDate)) {
+                                    const currentDateValue = updateQuery.$currentDate[field];
+                                    if (currentDateValue === true || typeof currentDateValue === 'object') {
+                                        const currentDate = new Date();
+                                        if (typeof currentDateValue === 'object') {
+                                            if (currentDateValue.$type === 'timestamp') {
+                                                item[field] = currentDate.getTime();
+                                            } else if (currentDateValue.$type === 'date') {
+                                              item[field] = currentDate;
+                                            } else {
+                                                throw new Error(`Invalid type for $currentDate: ${currentDateValue.$type}`);
+                                            }
+                                        } else {
+                                          item[field] = currentDate;
+                                        }
+                                    } else {
+                                        throw new Error(`Invalid value for $currentDate: ${currentDateValue}`);
+                                    }
+                                }
+                            break;
+                            case "$bit":
+                              for (const field of Object.keys(updateQuery.$bit)) {
+                                  const bitUpdate = updateQuery.$bit[field];
+                                  const nestedKeys = field.split('.');
+                                  let nestedObj = item;
+                                  for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                      const key = nestedKeys[i];
+                                      if (key.includes('[')) {
+                                          const arrayKey = key.substring(0, key.indexOf('['));
+                                          const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                          if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                              throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                          }
+                                          nestedObj = nestedObj[arrayKey][index];
+                                      } else {
+                                          if (!nestedObj[key]) {
+                                              throw new Error(`The key ${key} doesn't exist.`);
+                                          }
+                                          nestedObj = nestedObj[key];
+                                      }
+                                  }
+                                  const lastKey = nestedKeys[nestedKeys.length - 1];
+                                  if (typeof nestedObj[lastKey] !== 'number') {
+                                      throw new Error(`The field ${field} is not a number.`);
+                                  }
+                                  const { operation, value } = bitUpdate;
+                                  if (operation === 'and') {
+                                      nestedObj[lastKey] &= value;
+                                  } else if (operation === 'or') {
+                                      nestedObj[lastKey] |= value;
+                                  } else if (operation === 'xor') {
+                                      nestedObj[lastKey] ^= value;
+                                  } else {
+                                      throw new Error(`Invalid bitwise operation: ${operation}`);
+                                  }
+                              }
+                              break;
+                              case "$pullRange":
+                                for (const field of Object.keys(updateQuery.$pullRange)) {
+                                    const range = updateQuery.$pullRange[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    const { min, max } = range;
+                                    nestedObj[lastKey] = nestedObj[lastKey].filter((value: any) => value < min || value > max);
+                                }
+                                break;                                                       
+                                case "$mul":
+                                  for (const field of Object.keys(updateQuery.$mul)) {
+                                    const mulValue = updateQuery.$mul[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                      const key = nestedKeys[i];
+                                      if (key.includes('[')) {
+                                        const arrayKey = key.substring(0, key.indexOf('['));
+                                        const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                        if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                          throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                        }
+                                        nestedObj = nestedObj[arrayKey][index];
+                                      } else {
+                                        if (!nestedObj[key]) {
+                                          throw new Error(`The key ${key} doesn't exist.`);
+                                        }
+                                        nestedObj = nestedObj[key];
+                                      }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (Array.isArray(nestedObj[lastKey])) {
+                                      nestedObj[lastKey] = nestedObj[lastKey].map((value: number) => value * mulValue);
+                                    } else if (typeof nestedObj[lastKey] === 'number') {
+                                      nestedObj[lastKey] *= mulValue;
+                                    } else {
+                                      throw new Error(`The field ${field} is not a number or an array.`);
+                                    }
+                                  }
+                              break;                                  
+                              case "$max":
+                                for (const field of Object.keys(updateQuery.$max)) {
+                                    const maxValue = updateQuery.$max[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (typeof nestedObj[lastKey] !== 'number') {
+                                        throw new Error(`The field ${field} is not a number.`);
+                                    }
+                                    nestedObj[lastKey] = Math.max(nestedObj[lastKey], maxValue);
+                                }
+                              break;       
+                              case "$min":
+                                for (const field of Object.keys(updateQuery.$min)) {
+                                    const minValue = updateQuery.$min[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (typeof nestedObj[lastKey] !== 'number') {
+                                        throw new Error(`The field ${field} is not a number.`);
+                                    }
+                                    nestedObj[lastKey] = Math.min(nestedObj[lastKey], minValue);
+                                }
+                              break;   
+                              case "$addToSetMulti":
+                                for (const field of Object.keys(updateQuery.$addToSetMulti)) {
+                                    const valuesToAdd = updateQuery.$addToSetMulti[field];
+                                    const nestedKeys = field.split('.');
+                                    let nestedObj = item;
+                                    for (let i = 0; i < nestedKeys.length - 1; i++) {
+                                        const key = nestedKeys[i];
+                                        if (key.includes('[')) {
+                                            const arrayKey = key.substring(0, key.indexOf('['));
+                                            const index = parseInt(key.substring(key.indexOf('[') + 1, key.indexOf(']')));
+                                            if (!nestedObj[arrayKey] || !Array.isArray(nestedObj[arrayKey])) {
+                                                throw new Error(`The key ${arrayKey} is not an array or doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[arrayKey][index];
+                                        } else {
+                                            if (!nestedObj[key]) {
+                                                throw new Error(`The key ${key} doesn't exist.`);
+                                            }
+                                            nestedObj = nestedObj[key];
+                                        }
+                                    }
+                                    const lastKey = nestedKeys[nestedKeys.length - 1];
+                                    if (!Array.isArray(nestedObj[lastKey])) {
+                                        throw new Error(`The field ${field} is not an array.`);
+                                    }
+                                    for (const valueToAdd of valuesToAdd) {
+                                        if (!nestedObj[lastKey].includes(valueToAdd)) {
+                                            nestedObj[lastKey].push(valueToAdd);
+                                        }
+                                    }
+                                }
+                              break;                                                                                                                                                                                                                                                                                                        
                     }
-                  }
-                  break;
-                case "$slice":
-                  for (const field of Object.keys(updateQuery.$slice)) {
-                    if (Array.isArray(item[field])) {
-                      item[field] = item[field].slice(
-                        updateQuery.$slice[field]
-                      );
-                    }
-                  }
-                  break;
-                case "$sort":
-                  for (const field of Object.keys(updateQuery.$sort)) {
-                    if (Array.isArray(item[field])) {
-                      item[field].sort((a: any, b: any) => a - b);
-                    }
-                  }
-                  break;
-                default:
-                  logError({
-                    content: `Unsupported Opperator: ${key}.`,
-                    devLogs: this.devLogs,
-                    throwErr: true,
-                  });
-              }
-            } else {
-              item[key] = updateQuery[key];
+                }
+                updatedDocuments.push(item);
+                updatedCount++;
             }
-          }
 
-          updatedDocuments.push(item);
-          updatedCount++;
+            try {
+
+              let data: any;
+
+              if (this.secure.enable) {
+                data = await encodeJSON(currentData, this.secure.secret);
+              } else {
+                data = JSON.stringify(currentData, null, 2);
+              }
+        
+              fs.writeFileSync(dataName, data);
+
+                logSuccess({
+                    content: `${updatedCount} document(s) updated`,
+                    devLogs: this.devLogs,
+                });
+
+                updatedDocuments.forEach((updatedDocument) => {
+                    this.emit("dataUpdated", updatedDocument);
+                });
+
+                return {
+                    acknowledged: true,
+                    message: `${updatedCount} document(s) updated successfully.`,
+                    results: updatedDocuments,
+                };
+            } catch (e: any) {
+                logError({
+                    content: e.message,
+                    devLogs: this.devLogs,
+                });
+                return {
+                    acknowledged: false,
+                    errorMessage: e.message,
+                    results: null,
+                };
+            }
         }
-      });
-
-      let data: any;
-
-      if (this.secure.enable) {
-        data = await encodeJSON(currentData, this.secure.secret);
-      } else {
-        data = JSON.stringify(currentData);
-      }
-
-      fs.writeFileSync(dataname, data);
-
-      logSuccess({
-        content: `${updatedCount} document(s) updated`,
-        devLogs: this.devLogs,
-      });
-
-      this.emit("dataUpdated", updatedDocuments);
-
-      return {
-        acknowledged: true,
-        message: `${updatedCount} document(s) updated successfully.`,
-        results: updatedDocuments,
-      };
+        return {
+            acknowledged: false,
+            errorMessage: `No documents found or no action taken.`,
+            results: null,
+        };
     } catch (e: any) {
-      logError({
-        content: e.message,
-        devLogs: this.devLogs,
-      });
-      return {
-        acknowledged: false,
-        errorMessage: `${e.message}`,
-        results: null,
-      };
+        logError({
+            content: e.message,
+            devLogs: this.devLogs,
+        });
+        return {
+            acknowledged: false,
+            errorMessage: e.message,
+            results: null,
+        };
     }
   }
+
 
   async drop(dataname: string): Promise<AdapterResults> {
     try {
@@ -1272,6 +2178,7 @@ export class jsonAdapter extends EventEmitter implements versedbAdapter {
       };
     }
   }
+  
   async search(collectionFilters: CollectionFilter[]): Promise<AdapterResults> {
     try {
       const results: SearchResult = {};

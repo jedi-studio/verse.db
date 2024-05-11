@@ -1,5 +1,3 @@
-"use strict";
-
 // Define SchemaTypes enum
 export enum SchemaTypes {
   String = "String",
@@ -30,6 +28,8 @@ export interface FieldConfig {
   max?: number;
   validate?: (value: any) => boolean;
   unique?: boolean;
+  nestedSchema?: Schema | null;
+  default?: any;
 }
 
 /**
@@ -47,103 +47,97 @@ export default class Schema {
     existingData: any[] | null = null
   ): { [key: string]: string } | null {
     const errors: { [key: string]: string } = {};
-
+    const validatedData: { [key: string]: any } = {};
+  
     for (const field in this.fields) {
       const fieldConfig = this.fields[field];
       const schemaType = fieldConfig.type;
       const value = data[field];
-
-      if (fieldConfig.required && (value === undefined || value === null)) {
-        errors[field] = "This field is required.";
-      } else if (
-        ["String", "Number", "Boolean"].includes(schemaType) &&
-        typeof value !== schemaType.toLowerCase()
-      ) {
-        errors[
-          field
-        ] = `Invalid type. Expected ${schemaType}, got ${typeof value}.`;
-      } else if (schemaType === "Array" && !Array.isArray(value)) {
-        errors[field] = `Invalid type. Expected Array, got ${typeof value}.`;
-      } else if (schemaType === "Object" && typeof value !== "object") {
-        errors[field] = `Invalid type. Expected Object, got ${typeof value}.`;
-      } else if (schemaType === "Null" && value !== null) {
-        errors[field] = `Invalid type. Expected Null, got ${typeof value}.`;
-      } else if (schemaType === "Undefined" && value !== undefined) {
-        errors[
-          field
-        ] = `Invalid type. Expected Undefined, got ${typeof value}.`;
-      } else if (
-        schemaType === "String" &&
-        fieldConfig.minlength &&
-        typeof value === "string" &&
-        value.length < fieldConfig.minlength
-      ) {
-        errors[
-          field
-        ] = `Must be at least ${fieldConfig.minlength} characters long.`;
-      } else if (
-        schemaType === "String" &&
-        fieldConfig.maxlength &&
-        typeof value === "string" &&
-        value.length > fieldConfig.maxlength
-      ) {
-        errors[
-          field
-        ] = `Must be at most ${fieldConfig.maxlength} characters long.`;
-      } else if (
-        schemaType === "Number" &&
-        fieldConfig.min !== undefined &&
-        typeof value === "number" &&
-        value < fieldConfig.min
-      ) {
-        errors[field] = `Must be greater than or equal to ${fieldConfig.min}.`;
-      } else if (
-        schemaType === "Number" &&
-        fieldConfig.max !== undefined &&
-        typeof value === "number" &&
-        value > fieldConfig.max
-      ) {
-        errors[field] = `Must be less than or equal to ${fieldConfig.max}.`;
-      } else if (schemaType === "Date" && !(value instanceof Date)) {
-        errors[field] = `Invalid type. Expected Date, got ${typeof value}.`;
-      } else if (schemaType === "Color" && !isValidColor(value)) {
-        errors[field] = `Invalid color value for ${field}.`;
-      } else if (schemaType === "Url" && !isValidURL(value)) {
-        errors[field] = `Invalid URL format for ${field}.`;
-      } else if (
-        schemaType === "Enum" &&
-        fieldConfig.validate &&
-        !fieldConfig.validate(value)
-      ) {
-        errors[
-          field
-        ] = `Value ${value} is not a valid enum value for ${field}.`;
-      } else if (
-        schemaType === "Custom" &&
-        fieldConfig.validate &&
-        !fieldConfig.validate(value)
-      ) {
-        errors[field] = `Validation failed for ${field}.`;
-      } else if (
-        schemaType === "Union" &&
-        fieldConfig.validate &&
-        !fieldConfig.validate(value)
-      ) {
-        errors[
-          field
-        ] = `Value ${value} does not match any of the types in the union for ${field}.`;
-      } else if (schemaType === "Any") {
-      } else if (fieldConfig.unique && existingData) {
-        const hasDuplicate = existingData.some(
-          (item: any) => item[field] === value
-        );
-        if (hasDuplicate) {
-          errors[field] = "This value must be unique.";
+      const defaultValue = fieldConfig.default;
+  
+      // Apply default value if value is undefined, null, or an empty object/array
+      const fieldValue = value !== undefined && value !== null ? value : defaultValue;
+  
+      // Validate nested schema if present
+      if (fieldConfig.nestedSchema && typeof fieldValue === "object" && fieldValue !== null) {
+        const nestedErrors = Array.isArray(fieldValue)
+          ? this.validateArray(fieldValue, fieldConfig.nestedSchema)
+          : this.validateObject(fieldValue, fieldConfig.nestedSchema);
+  
+        if (nestedErrors) {
+          Object.assign(errors, nestedErrors);
         }
+      } else {
+        if (fieldConfig.required && (fieldValue === undefined || fieldValue === null)) {
+          errors[field] = "This field is required.";
+        } else if (schemaType === SchemaTypes.String && typeof fieldValue !== "string") {
+          errors[field] = `Invalid type. Expected ${schemaType}, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Number && typeof fieldValue !== "number") {
+          errors[field] = `Invalid type. Expected ${schemaType}, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Boolean && typeof fieldValue !== "boolean") {
+          errors[field] = `Invalid type. Expected ${schemaType}, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Array && !Array.isArray(fieldValue)) {
+          errors[field] = `Invalid type. Expected Array, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Object && typeof fieldValue !== "object") {
+          errors[field] = `Invalid type. Expected Object, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Null && fieldValue !== null) {
+          errors[field] = `Invalid type. Expected Null, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Undefined && fieldValue !== undefined) {
+          errors[field] = `Invalid type. Expected Undefined, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Date && !(fieldValue instanceof Date)) {
+          errors[field] = `Invalid type. Expected Date, got ${typeof fieldValue}.`;
+        } else if (schemaType === SchemaTypes.Color && !isValidColor(fieldValue)) {
+          errors[field] = `Invalid color value for ${field}.`;
+        } else if (schemaType === SchemaTypes.URL && !isValidURL(fieldValue)) {
+          errors[field] = `Invalid URL format for ${field}.`;
+        } else if (
+          schemaType === "Enum" &&
+          fieldConfig.validate &&
+          !fieldConfig.validate(fieldValue)
+        ) {
+          errors[field] = `Value ${fieldValue} is not a valid enum value for ${field}.`;
+        } else if (
+          schemaType === "Custom" &&
+          fieldConfig.validate &&
+          !fieldConfig.validate(fieldValue)
+        ) {
+          errors[field] = `Validation failed for ${field}.`;
+        } else if (
+          schemaType === "Union" &&
+          fieldConfig.validate &&
+          !fieldConfig.validate(fieldValue)
+        ) {
+          errors[field] = `Value ${fieldValue} does not match any of the types in the union for ${field}.`;
+        } else if (schemaType === "Any") {
+        } else if (fieldConfig.unique && existingData) {
+          const hasDuplicate = existingData.some(
+            (item: any) => item[field] === fieldValue
+          );
+          if (hasDuplicate) {
+            errors[field] = "This value must be unique.";
+          }
+        }
+  
+        validatedData[field] = fieldValue;
       }
     }
-
+  
     return Object.keys(errors).length === 0 ? null : errors;
+  }
+  
+  private validateArray(array: any[], nestedSchema: Schema): { [key: string]: string } | null {
+    const errors: { [key: string]: string } = {};
+    for (let i = 0; i < array.length; i++) {
+      const itemErrors = nestedSchema.validate(array[i]);
+      if (itemErrors) {
+        Object.assign(errors, itemErrors);
+      }
+    }
+    return Object.keys(errors).length === 0 ? null : errors;
+  }
+
+  private validateObject(obj: { [key: string]: any }, nestedSchema: Schema): { [key: string]: string } | null  {
+    return nestedSchema.validate(obj);
   }
 }
 

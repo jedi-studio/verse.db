@@ -19,10 +19,10 @@ import { logError } from "./logger";
  */
 export default class connect {
   public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null;
-  public devLogs: DevLogsOptions = { enable: false, path: "" };
-  public SecureSystem: SecureSystem = { enable: false, secret: "" };
-  public backup: BackupOptions = { enable: false, path: "", retention: 0 };
-  public dataPath: string = "";
+  public devLogs: DevLogsOptions;
+  public SecureSystem: SecureSystem;
+  public backup: BackupOptions;
+  public dataPath: string;
   public fileType: string = "";
   public adapterType: string = "";
   public key: string;
@@ -32,8 +32,8 @@ export default class connect {
    */
   constructor(options: AdapterOptions) {
     this.dataPath = options.dataPath;
-    this.devLogs = options.devLogs;
-    this.SecureSystem = options.secure;
+    this.devLogs = options.devLogs ?? { enable: false, path: "" };
+    this.SecureSystem = options.secure ?? { enable: false, secret: "" };
     this.key = this.SecureSystem?.enable
       ? this.SecureSystem.secret || "versedb"
       : "versedb";

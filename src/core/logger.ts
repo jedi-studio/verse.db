@@ -84,10 +84,6 @@ export function logError({
       throw new Error(
         `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
       );
-    } else {
-      console.error(
-        `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
-      );
     }
   }
 }
@@ -109,10 +105,6 @@ export function logSuccess({
       logsPath: devLogs.path,
       logFile: "success.log",
     });
-    console.log(
-      `${colors.bright}${colors.fg.green}[Successful]:${colors.reset} ${content}`
-    );
-  } else {
     console.log(
       `${colors.bright}${colors.fg.green}[Successful]:${colors.reset} ${content}`
     );
@@ -139,10 +131,6 @@ export function logWarning({
     console.warn(
       `${colors.bright}${colors.fg.yellow}[Warning]:${colors.reset} ${content}`
     );
-  } else {
-    console.warn(
-      `${colors.bright}${colors.fg.yellow}[Warning]:${colors.reset} ${content}`
-    );
   }
 }
 
@@ -163,10 +151,6 @@ export function logInfo({
       logsPath: devLogs.path,
       logFile: "info.log",
     });
-    console.info(
-      `${colors.bright}${colors.fg.blue}[Info]:${colors.reset} ${content}`
-    );
-  } else {
     console.info(
       `${colors.bright}${colors.fg.blue}[Info]:${colors.reset} ${content}`
     );

@@ -106,8 +106,8 @@ export interface AdapterOptions {
   adapter: string;
   adapterType?: string | null;
   dataPath: string;
-  devLogs: DevLogsOptions;
-  secure: SecureSystem;
+  devLogs?: DevLogsOptions;
+  secure?: SecureSystem;
   backup?: BackupOptions;
 }
 
