@@ -20,3 +20,25 @@ export function formatDateTime(date: Date) {
  */
 export const currentDate: string = formatDateTime(new Date());
 export const currentDateString: string = currentDate.replace(/\D/g, ""); 
+
+/**
+ * @returns Local Data Formate "2024/5/31, 1:44:7 AM"
+ */
+function getLocalFormattedDate() {
+  const now = new Date();
+  const options: any = {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: true
+  };
+  return now.toLocaleString('en-US', options);
+}
+
+/**
+ * @returns Local Data Formate "2024/5/31, 1:44:7 AM"
+ */
+export const currentLocalDate = getLocalFormattedDate();

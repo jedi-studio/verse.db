@@ -8,32 +8,34 @@ import {
   CollectionFilter,
   DisplayOptions,
   operationKeys,
+  QueryOptions,
 } from "../types/connect";
-import { searchFilters, nearbyOptions } from "../types/adapter";
-import Schema from "./schema";
+import { searchFilters, nearbyOptions,  } from "../types/adapter";
+import Schema from "./functions/schema";
 import { jsonAdapter, yamlAdapter, sqlAdapter } from "../adapters/export";
-import { logError } from "./logger";
-
+import { logError } from "./functions/logger";
 /**
  * The main connect class for interacting with the database
  */
 export default class connect {
   public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null;
-  public devLogs: DevLogsOptions = { enable: false, path: "" };
-  public SecureSystem: SecureSystem = { enable: false, secret: "" };
-  public backup: BackupOptions = { enable: false, path: "", retention: 0 };
-  public dataPath: string = "";
+  public devLogs: DevLogsOptions;
+  public SecureSystem: SecureSystem;
+  public backup: BackupOptions;
+  public dataPath: string;
   public fileType: string = "";
   public adapterType: string = "";
   public key: string;
+
   /**
    * Sets up a database with one of the adapters
    * @param {AdapterOptions} options - Options for setting up the adapter
    */
+
   constructor(options: AdapterOptions) {
     this.dataPath = options.dataPath;
-    this.devLogs = options.devLogs;
-    this.SecureSystem = options.secure;
+    this.devLogs = options.devLogs ?? { enable: false, path: "" };
+    this.SecureSystem = options.secure ?? { enable: false, secret: "" };
     this.key = this.SecureSystem?.enable
       ? this.SecureSystem.secret || "versedb"
       : "versedb";
@@ -98,9 +100,7 @@ export default class connect {
         } else {
           fs.appendFileSync(secretsFilePath, secretString);
         }
-      } catch (e: any) {
-        console.error('Error:', e.message);
-        
+      } catch (e: any) {        
         if (e.code === 'ENOENT' && e.path === configPath) {
           fs.mkdirSync(configPath, { recursive: true });
           fs.writeFileSync(secretsFilePath, secretString);
@@ -161,7 +161,7 @@ export default class connect {
    * Add data to a data file
    * @param {string} dataname - The name of the data file
    * @param {any} newData - The new data to add
-   * @param {object} [options] - Additional options
+   * @param {AdapterUniqueKey} [options] - Additional options
    * @returns {Promise<any>} - A Promise that resolves with the saved data
    */
   async add(dataname: string, newData: any, options?: any) {
@@ -193,7 +193,7 @@ export default class connect {
    * @param query the search query
    * @returns the found data
    */
-  async find(dataname: string, query: any) {
+  async find(dataname: string, query: any, options?: QueryOptions, loadedData?: any[]) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -207,7 +207,7 @@ export default class connect {
       typeof this.adapter?.add === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.find(filePath, query);
+      return await this.adapter?.find(filePath, query, options, loadedData);
     } else {
       logError({
         content: "Find operation is not supported by the current adapter.",
@@ -223,7 +223,7 @@ export default class connect {
    * @param displayOptions the options of the display of the data files
    * @returns all the data files you selected
    */
-  async loadAll(dataname: string, displayOptions: any) {
+  async loadAll(dataname: string, displayOptions: any, loadedData?: any[] ) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -237,7 +237,7 @@ export default class connect {
       typeof this.adapter?.loadAll === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.loadAll(filePath, displayOptions);
+      return await this.adapter?.loadAll(filePath, displayOptions, loadedData);
     } else {
       logError({
         content:
@@ -248,6 +248,36 @@ export default class connect {
     }
   }
 
+   /**
+   *
+   * @param dataname the name of data files to get multiple files in the same time
+   * @param pipeline the options of the aggregation
+   * @returns all the results
+   */
+  async aggregate(dataname: string, pipeline: any[]) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      !(this.adapter instanceof sqlAdapter) &&
+      typeof this.adapter?.aggregate === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.aggregate(filePath, pipeline);
+    } else {
+      logError({
+        content:
+          "Aggregate operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
   /**
    * 
    * @param {any[]} operations - array of objects that contains the operations you want
@@ -276,13 +306,14 @@ export default class connect {
       });
     }
   }
-  /**
-   * @param dataname the name of the data file you want to edit an item in
-   * @param query the search query of the item you want to edit
-   * @param newData the new data that will be edited with the old one
-   * @param upsert an upsert option
-   * @returns returnts edited data
-   */
+/**
+ * Remove data from the database.
+ * @param {string} dataname - The name of the data to be removed.
+ * @param {any} query - The query to identify the data to be removed.
+ * @param {Object} options - Options for the remove operation.
+ * @param {number} options.docCount - Number of documents to remove.
+ * @returns {Promise} A Promise that resolves when the operation is completed.
+ */
   async remove(dataname: string, query: any, options: { docCount: number }) {
     if (!this.adapter) {
       logError({
@@ -317,7 +348,7 @@ export default class connect {
    * @param upsert an upsert option
    * @returns returnts edited data
    */
-  async update(dataname: string, query: any, newData: any, upsert: boolean) {
+  async update(dataname: string, query: any, newData: operationKeys, upsert?: boolean, loadedData?: any[]) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -398,7 +429,7 @@ export default class connect {
         return results || null;
       }
 
-      return results?.results || null;
+      return results || null;
     } else {
       logError({
         content:
@@ -408,7 +439,11 @@ export default class connect {
       });
     }
   }
-
+/**
+ * Get nearby vectors from the database.
+ * @param {nearbyOptions} data - Options for the nearby vectors search.
+ * @returns {Promise} A Promise that resolves with nearby vectors.
+ */
   async nearbyVectors(data: nearbyOptions) {
     try {
       if (!this.adapter) {
@@ -459,7 +494,12 @@ export default class connect {
       return null;
     }
   }
-
+/**
+ * Create a buffer zone in the database.
+ * @param {any} geometry - The geometry used for creating the buffer zone.
+ * @param {any} bufferDistance - The buffer distance.
+ * @returns {Promise} A Promise that resolves with the created buffer zone.
+ */
   async polygonArea(polygonCoordinates: any) {
     try {
       if (!this.adapter) {
@@ -512,7 +552,12 @@ export default class connect {
       return null;
     }
   }
-
+/**
+ * Create a buffer zone in the database.
+ * @param {any} geometry - The geometry used for creating the buffer zone.
+ * @param {any} bufferDistance - The buffer distance.
+ * @returns {Promise} A Promise that resolves with the created buffer zone.
+ */
   async bufferZone(geometry: any, bufferDistance: any) {
     try {
       if (!this.adapter) {
@@ -563,9 +608,14 @@ export default class connect {
       return null;
     }
   }
-
-
-  async updateMany(dataname: string, queries: any[], newData: operationKeys) {
+/**
+ * Update multiple documents in the database.
+ * @param {string} dataname - The name of the data to be updated.
+ * @param {Array<any>} queries - Array of queries to identify the data to be updated.
+ * @param {operationKeys} newData - The updated data.
+ * @returns {Promise} A Promise that resolves when the operation is completed.
+ */
+  async updateMany(dataname: string, queries: any, newData: operationKeys) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -1125,17 +1175,13 @@ export default class connect {
     }
   }
 
-  /**
-   * @param dataname the schema name
-   * @param schema the schema defination
-   * @returns {add} to add data to the database
-   * @returns {remove} to remove data to the database
-   * @returns {update} to update data from the database
-   * @returns {find} to find data in the database
-   * @returns {load} to load a database
-   * @returns {drop} to drop a database
-   */
-  model(dataname: string, schema: Schema): any {
+/**
+ * Define a model for interacting with the database.
+ * @param {string} dataname - The name of the schema.
+ * @param {Schema} schema - The schema definition.
+ * @returns {Object} An object containing database operation functions.
+ */
+   model(dataname: string, schema: Schema): any {
     if (!dataname || !schema) {
       logError({
         content:
@@ -1150,23 +1196,44 @@ export default class connect {
       typeof this.adapter?.add === "function"
     ) {
       return {
+      /**
+       * Add data to the database.
+       * @param {any} newData - The data to be added.
+       * @param {any} [options] - Additional options for the operation.
+       * @returns {Promise} A Promise that resolves when the operation is completed.
+       */
+      
         add: async function (this: connect, newData: any, options?: any) {
-          const validationErrors: any = schema.validate(newData);
+          const loadingData = await this.load(dataname);
+          const currenData = loadingData?.results;
+          const validationErrors: any = schema.validate(newData, currenData);
           if (validationErrors) {
             return Promise.reject(validationErrors);
           }
 
-          return this.add(dataname, newData, options);
+          return await this.add(dataname, newData, options);
         }.bind(this),
-
+      /**
+       * Remove data from the database.
+       * @param {any} query - The query to identify the data to be removed.
+       * @param {Object} options - Options for the remove operation.
+       * @param {number} options.docCount - Number of documents to remove.
+       * @returns {Promise} A Promise that resolves when the operation is completed.
+       */
         remove: async function (
           this: connect,
           query: any,
           options: { docCount: number }
         ) {
-          return this.remove(dataname, query, options);
+          return await this.remove(dataname, query, options);
         }.bind(this),
-
+      /**
+       * Update data in the database.
+       * @param {any} query - The query to identify the data to be updated.
+       * @param {any} newData - The updated data.
+       * @param {boolean} upsert - Whether to perform an upsert operation.
+       * @returns {Promise} A Promise that resolves when the operation is completed.
+       */
         update: async function (
           this: connect,
           query: any,
@@ -1178,21 +1245,38 @@ export default class connect {
             return Promise.reject(validationErrors);
           }
 
-          return this.update(dataname, query, newData, upsert);
+          return await this.update(dataname, query, newData, upsert);
         }.bind(this),
-
+      /**
+       * Find data in the database.
+       * @param {any} query - The query to find the data.
+       * @returns {Promise} A Promise that resolves with the found data.
+       */
         find: async function (this: connect, query: any) {
-          return this.find(dataname, query);
+          const loadingData = await this.load(dataname);
+          const currenData = loadingData?.results;
+          return await this.find(dataname, query, currenData);
         }.bind(this),
-
+      /**
+       * Load a database.
+       * @returns {Promise} A Promise that resolves when the database is loaded.
+       */
         load: async function (this: connect) {
-          return this.load(dataname);
+          return await this.load(dataname);
         }.bind(this),
-
+      /**
+       * Drop a database.
+       * @returns {Promise} A Promise that resolves when the database is dropped.
+       */
         drop: async function (this: connect) {
-          return this.drop(dataname);
+          return await this.drop(dataname);
         }.bind(this),
-
+      /**
+       * Update multiple documents in the database.
+       * @param {Array<any>} queries - Array of queries to identify the data to be updated.
+       * @param {operationKeys} newData - The updated data.
+       * @returns {Promise} A Promise that resolves when the operation is completed.
+       */
         updateMany: async function (
           this: connect,
           queries: any[],
@@ -1203,49 +1287,87 @@ export default class connect {
             return Promise.reject(validationErrors);
           }
 
-          return this.updateMany(dataname, queries, newData);
+          return await this.updateMany(dataname, queries, newData);
         }.bind(this),
-
+      /**
+       * Load all data from the database.
+       * @param {any} displayOptions - Options for displaying the data.
+       * @returns {Promise} A Promise that resolves with all data from the database.
+       */
         allData: async function (this: connect, displayOptions: any) {
-          return this.loadAll(dataname, displayOptions);
+          return await this.loadAll(dataname, displayOptions);
         }.bind(this),
-
+      /**
+       * Search for data in the database.
+       * @param {Array<CollectionFilter>} collectionFilters - Filters to apply to the search.
+       * @returns {Promise} A Promise that resolves with the search results.
+       */
         search: async function (
           this: connect,
           collectionFilters: CollectionFilter[]
         ) {
-          return this.search(collectionFilters);
+          return await this.search(collectionFilters);
         }.bind(this),
-
+      /**
+       * Get nearby vectors in the database.
+       * @param {any} data - The data used for the search.
+       * @returns {Promise} A Promise that resolves with nearby vectors.
+       */
         nearbyVectors: async function (this: connect, data: any) {
-          return this.nearbyVectors(data);
+          return await this.nearbyVectors(data);
         }.bind(this),
-
+      /**
+       * Create a buffer zone in the database.
+       * @param {any} geometry - The geometry used for creating the buffer zone.
+       * @param {any} bufferDistance - The buffer distance.
+       * @returns {Promise} A Promise that resolves with the created buffer zone.
+       */
         bufferZone: async function (
           this: connect,
           geometry: any,
           bufferDistance: any
         ) {
-          return this.bufferZone(geometry, bufferDistance);
+          return await this.bufferZone(geometry, bufferDistance);
         }.bind(this),
-
+      /**
+       * Calculate the area of a polygon in the database.
+       * @param {any} polygonCoordinates - The coordinates of the polygon.
+       * @returns {Promise} A Promise that resolves with the area of the polygon.
+       */
         polygonArea: async function (this: connect, polygonCoordinates: any) {
-          return this.polygonArea(polygonCoordinates);
+          return await this.polygonArea(polygonCoordinates);
         }.bind(this),
-
+      /**
+       * Count documents in the database.
+       * @returns {Promise} A Promise that resolves with the count of documents.
+       */
         countDoc: async function (this: connect) {
-          return this.countDoc(dataname);
+          return await this.countDoc(dataname);
         }.bind(this),
-
+      /**
+       * Get the size of data in the database.
+       * @returns {Promise} A Promise that resolves with the size of data.
+       */
         dataSize: async function (this: connect) {
-          return this.dataSize(dataname);
+          return await this.dataSize(dataname);
         }.bind(this),
-
+      /**
+       * Watch for changes in the database.
+       * @returns {Promise} A Promise that resolves with the changes in the database.
+       */
         watch: async function (this: connect) {
-          return this.watch(dataname);
+          return await this.watch(dataname);
         }.bind(this),
+      /**
+       * Perform batch tasks in the database.
+       * @param {Array<any>} operations - Array of operations to perform.
+       * @returns {Promise} A Promise that resolves when batch tasks are completed.
+       */
         batchTasks: async function (this: connect, operations: any[]) {
           return this.batchTasks(operations);
+        }.bind(this),
+        aggregate: async function (this: connect, pipeline: any[]) {
+          return await this.aggregate(dataname, pipeline);
         }.bind(this),
       };
     } else {

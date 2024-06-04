@@ -1,8 +1,8 @@
 import path from "path";
 import fs from "fs/promises";
-import colors from "../lib/colors";
-import { currentDate } from "../lib/date";
-import { DevLogsOptions } from "../types/connect";
+import colors from "../../lib/colors";
+import { currentLocalDate } from "../../lib/date";
+import { DevLogsOptions } from "../../types/connect";
 type logsPath = string;
 type LogFile = string;
 
@@ -27,7 +27,7 @@ async function logToFile({
     await fs.mkdir(logsPath, { recursive: true });
     await fs.appendFile(
       logFilePath,
-      `${currentDate} ${removeAnsiEscapeCodes(content)}\n`,
+      `${currentLocalDate} ${removeAnsiEscapeCodes(content)}\n`,
       "utf8"
     );
   } catch (error: any) {
@@ -66,27 +66,23 @@ export function logError({
 }): void {
   if (devLogs?.enable === true) {
     logToFile({
-      content: `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`,
+      content: `${colors.bright}${colors.fg.red}Error${colors.reset} ${content}`,
       logsPath: devLogs.path,
       logFile: "error.log",
     });
     if (throwErr === true) {
       throw new Error(
-        `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
+        `${colors.fg.offWhite}${currentLocalDate}${colors.reset} ${colors.bright}${colors.fg.red}Error${colors.reset} ${content}`
       );
     } else {
       console.error(
-        `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
+        `${colors.fg.offWhite}${currentLocalDate}${colors.reset} ${colors.bright}${colors.fg.red}Error${colors.reset} ${content}`
       );
     }
   } else {
     if (throwErr === true) {
       throw new Error(
-        `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
-      );
-    } else {
-      console.error(
-        `${colors.bright}${colors.fg.red}[Error]:${colors.reset} ${content}`
+        `${colors.fg.offWhite}${currentLocalDate}${colors.reset} ${colors.bright}${colors.fg.red}Error${colors.reset} ${content}`
       );
     }
   }
@@ -105,16 +101,12 @@ export function logSuccess({
 }): void {
   if (devLogs?.enable === true) {
     logToFile({
-      content: `${colors.bright}${colors.fg.green}[Successful]:${colors.reset} ${content}`,
+      content: `${colors.bright}${colors.fg.green}Successful${colors.reset} ${content}`,
       logsPath: devLogs.path,
       logFile: "success.log",
     });
     console.log(
-      `${colors.bright}${colors.fg.green}[Successful]:${colors.reset} ${content}`
-    );
-  } else {
-    console.log(
-      `${colors.bright}${colors.fg.green}[Successful]:${colors.reset} ${content}`
+      `${colors.fg.offWhite}${currentLocalDate}${colors.reset} ${colors.bright}${colors.fg.green}Successful${colors.reset} ${content}`
     );
   }
 }
@@ -132,22 +124,18 @@ export function logWarning({
 }): void {
   if (devLogs?.enable === true) {
     logToFile({
-      content: `${colors.bright}${colors.fg.yellow}[Warning]:${colors.reset} ${content}`,
+      content: `${colors.bright}${colors.fg.yellow}Warning${colors.reset} ${content}`,
       logsPath: devLogs.path,
       logFile: "warning.log",
     });
     console.warn(
-      `${colors.bright}${colors.fg.yellow}[Warning]:${colors.reset} ${content}`
-    );
-  } else {
-    console.warn(
-      `${colors.bright}${colors.fg.yellow}[Warning]:${colors.reset} ${content}`
+      `${colors.fg.offWhite}${currentLocalDate}${colors.reset} ${colors.bright}${colors.fg.yellow}Warning${colors.reset} ${content}`
     );
   }
 }
 
 /**
- * @param content the content to log Info it
+ * @param content the content to loginfoit
  */
 export function logInfo({
   content,
@@ -159,16 +147,12 @@ export function logInfo({
 }): void {
   if (devLogs?.enable === true) {
     logToFile({
-      content: `${colors.bright}${colors.fg.blue}[Info]:${colors.reset} ${content}`,
+      content: `${colors.bright}${colors.fg.blue}info${colors.reset} ${content}`,
       logsPath: devLogs.path,
       logFile: "info.log",
     });
     console.info(
-      `${colors.bright}${colors.fg.blue}[Info]:${colors.reset} ${content}`
-    );
-  } else {
-    console.info(
-      `${colors.bright}${colors.fg.blue}[Info]:${colors.reset} ${content}`
+      `${colors.fg.offWhite}${currentLocalDate}${colors.reset} ${colors.bright}${colors.fg.blue}info${colors.reset} ${content}`
     );
   }
 }

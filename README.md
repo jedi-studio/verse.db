@@ -9,6 +9,7 @@ Unlock the potential of your data with Verse.db, the premier data management too
 - **Performance-Driven**: Experience lightning-fast performance for all your data operations.
 - **Real-Time Data Store**: Harness the power of real-time data storage for instantaneous updates and access to your data. Keep your applications synchronized and up-to-date with the latest information.
 - **Logging System for Developers**: Streamline your development process with Verse.db's built-in logging system. Gain insights into your application's behavior and track changes effectively. Debugging and troubleshooting become effortless with detailed logs at your disposal.
+- **Support for Complex Queries**: Effortlessly execute complex queries with Verse.db's advanced query capabilities. Utilize powerful filtering, sorting, and aggregation functionalities to extract valuable insights from your data with ease.
 - **User-Friendly Interface**: Enjoy an intuitive and easy-to-use interface that simplifies data management tasks for developers of all levels. Whether you're a seasoned professional or a beginner, Verse.db ensures a smooth and seamless experience.
 - **Continuous Improvement**: Benefit from regular updates and enhancements to ensure Verse.db stays ahead of the curve. Our dedicated team is committed to delivering the best-in-class data management solution tailored to your needs.
 
@@ -82,3 +83,4 @@ For detailed information on usage, operations, and methods, visit [Verse.db Docu
 ### Soon: SQOL
 
 - In the future updates we will introduce our new brand database SQOL: (Structured Query Object Language). Stay tuned ;).
+- Check it out its structure on [Git-Hub](https://github.com/jedi-studio/).
