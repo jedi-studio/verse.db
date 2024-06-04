@@ -1625,76 +1625,49 @@ async loadAll(
  }
 
  async aggregate(dataname: string, pipeline: any[]): Promise<AdapterResults> {
-   try {
-     const loaded = await this.load(dataname);
-     let currentData: any[] = loaded.results;
- 
-     for (const stage of pipeline) {
-       const stageKey = Object.keys(stage)[0];
-       const stageValue = stage[stageKey];
- 
-       switch (stageKey) {
-         case '$match':
-           currentData = currentData.filter(item => this.matchesQuery(item, stageValue));
-           break;
-         case '$group':
-           const groupId = stageValue._id;
-           const groupFields = { ...stageValue };
-           delete groupFields._id;
-           const groupedData = currentData.reduce((acc: Record<string, any>, item: any) => {
-             const groupKey = item[groupId];
-             if (!acc[groupKey]) acc[groupKey] = { _id: groupKey, ...groupFields };
-             for (const [key, val] of Object.entries(groupFields)) {
-               if ((val as any).$sum !== undefined) {
-                 acc[groupKey][key] = (acc[groupKey][key] || 0) + item[(val as any).$sum];
-               }
-             }
-             return acc;
-           }, {});
-           currentData = Object.values(groupedData);
-           break;
-         case '$sort':
-           const sortField = Object.keys(stageValue)[0];
-           const sortOrder = stageValue[sortField];
-           currentData.sort((a, b) => (sortOrder === 1 ? a[sortField] - b[sortField] : b[sortField] - a[sortField]));
-           break;
-         case '$project':
-           currentData = currentData.map(item => {
-             const projectedItem: Record<string, any> = {};
-             for (const [key, value] of Object.entries(stageValue)) {
-               if (value === 1) projectedItem[key] = item[key];
-             }
-             return projectedItem;
-           });
-           break;
-         case '$limit':
-           currentData = currentData.slice(0, stageValue);
-           break;
-         case '$skip':
-           currentData = currentData.slice(stageValue);
-           break;
-         case '$unwind':
-           const unwindField = stageValue.slice(1);
-           currentData = currentData.flatMap(item => item[unwindField].map((elem: any) => ({ ...item, [unwindField]: elem })));
-           break;
-         default:
-           throw new Error(`Unsupported stage: ${stageKey}`);
-       }
-     }
- 
-     return {
-       acknowledged: true,
-       message: "Aggregation successful.",
-       results: currentData,
-     };
-   } catch (e: any) {
-     return {
-       acknowledged: false,
-       errorMessage: `${e.message}`,
-       results: null,
-     };
-   }
- }
+  try {
+    const loadedData = (await this.load(dataname)).results;
+    await this.index(dataname);
+    let aggregatedData = [...loadedData];
+
+    for (const stage of pipeline) {
+        if (stage.$match) {
+            aggregatedData = aggregatedData.filter(item => this.matchesQuery(item, stage.$match));
+        } else if (stage.$group) {
+            const groupId = stage.$group._id;
+            const groupedData: Record<string, any[]> = {};
+
+            for (const item of aggregatedData) {
+                const key = item[groupId];
+                if (!groupedData[key]) {
+                    groupedData[key] = [];
+                }
+                groupedData[key].push(item);
+            }
+
+            aggregatedData = Object.keys(groupedData).map(key => {
+                const groupItems = groupedData[key];
+                const aggregatedItem: Record<string, any> = { _id: key };
+
+                for (const [field, expr] of Object.entries(stage.$group)) {
+                    if (field === "_id") continue;
+                    const aggExpr = expr as AggregationExpression;
+                    if (aggExpr.$sum) {
+                        aggregatedItem[field] = groupItems.reduce((sum, item) => sum + item[aggExpr.$sum!], 0);
+                    }
+                }
+
+                return aggregatedItem;
+            });
+        }
+    }
+
+    return { results: aggregatedData, acknowledged: true, message: 'This method is not complete. Please wait for next update' };
+  } catch (e) {
+    return { results: null, acknowledged: false, errorMessage: 'This method is not complete. Please wait for next update' };
+  }
+}
+
 
   async moveData(
     from: string,
