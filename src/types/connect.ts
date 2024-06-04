@@ -1,11 +1,11 @@
 export interface JSONAdapter {
   load(dataname: string): Promise<any[]>;
   add(dataname: string, newData: any, options?: any): Promise<void>;
-  find(dataname: string, query: any, options?: any): Promise<any[]>;
-  loadAll(dataname: string, displayOptions?: any): Promise<void>;
-  remove(dataname: string, query: any, options?: any): Promise<void>;
-  update(dataname: string, query: any, newData: any): Promise<void>;
-  updateMany(dataname: any, queries: any[any], newData: operationKeys,): Promise<void>;
+  find(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<any[]>;
+  loadAll(dataname: string, displayOptions?: any, loadedData?: any[]): Promise<void>;
+  remove(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<void>;
+  update(dataname: string, query: any, newData: any, loadedData?: any[]): Promise<void>;
+  updateMany(dataname: any, queries: any[any], newData: operationKeys, loadedData?: any[]): Promise<void>;
   drop(dataname: string): Promise<void>;
   nearbyVectors(data: nearbyOptions): Promise<void>
   polygonArea(polygonCoordinates: any): Promise<void>;
@@ -14,17 +14,18 @@ export interface JSONAdapter {
   countDoc(dataname: string): Promise<any>;
   dataSize(dataname: string): Promise<any>;
   batchTasks(operation: any[]): Promise<any>;
+  aggregate(dataname: string, pipeline: any[]): Promise<any>;
   moveData(from: string, to: string, options: { query?: any, dropSource?: boolean }): Promise<any>;
   model(dataname: string, schema: any): any;
 }
 export interface YAMLAdapter {
   load(dataname: string): Promise<any[]>;
   add(dataname: string, newData: any, options?: any): Promise<void>;
-  find(dataname: string, query: any, options?: any): Promise<any[]>;
-  loadAll(dataname: string, displayOptions?: any): Promise<void>;
-  remove(dataname: string, query: any, options?: any): Promise<void>;
-  update(dataname: string, query: any, newData: any): Promise<void>;
-  updateMany(dataname: any, queries: any[any], newData: operationKeys,): Promise<void>;
+  find(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<any[]>;
+  loadAll(dataname: string, displayOptions?: any, loadedData?: any[]): Promise<void>;
+  remove(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<void>;
+  update(dataname: string, query: any, newData: any, loadedData?: any[]): Promise<void>;
+  updateMany(dataname: any, queries: any[any], newData: operationKeys, loadedData?: any[]): Promise<void>;
   drop(dataname: string): Promise<void>;
   nearbyVectors(data: nearbyOptions): Promise<void>
   polygonArea(polygonCoordinates: any): Promise<void>;
@@ -106,8 +107,8 @@ export interface AdapterOptions {
   adapter: string;
   adapterType?: string | null;
   dataPath: string;
-  devLogs: DevLogsOptions;
-  secure: SecureSystem;
+  devLogs?: DevLogsOptions;
+  secure?: SecureSystem;
   backup?: BackupOptions;
 }
 
@@ -136,13 +137,21 @@ export interface MigrationParams {
 }
 
 export interface operationKeys {
-  $inc?: { [key: string]: number };
   $set?: { [key: string]: any };
+  $unset?: { [key: string]: any };
   $push?: { [key: string]: any };
+  $pull?: { [key: string]: any };
+  $addToSet?: { [key: string]: any };
+  $rename?: { [key: string]: string };
   $min?: { [key: string]: any };
   $max?: { [key: string]: any };
-  $currentDate?: { [key: string]: boolean | { $type: "date" | "timestamp" } };
-  upsert?: boolean;
+  $mul?: { [key: string]: number };
+  $inc?: { [key: string]: number };
+  $bit?: { [key: string]: any };
+  $currentDate?: { [key: string]: boolean | { $type: 'date' | 'timestamp' }};
+  $pop?: { [key: string]: number };
+  $slice?: { [key: string]: [number, number] | number };
+  $sort?: { [key: string]: 1 | -1 };
 }
 
 export interface nearbyOptions {
@@ -160,4 +169,34 @@ export interface searchFilters {
   pageSize?: number;
   sortOrder?: 'asc' | 'desc';
   displayment?: number | null;
+}
+
+export interface queries<T> {
+  $and?: queries<T>[];
+  $or?: queries<T>[];
+  $validate?: (value: T) => boolean;
+  $text?: string;
+  $sort?: 1 | -1;
+  $slice?: number | [number, number];
+  $some?: boolean;
+  $gt?: number;
+  $lt?: number;
+  $nin?: T[];
+  $exists?: boolean;
+  $not?: queries<T>;
+  $in?: T[];
+  $elemMatch?: queries<T>;
+  $typeOf?: string | 'string' | 'number' | 'boolean' | 'undefined' | 'array' | 'object' | 'null' | 'any';
+  $regex?: string;
+  $size?: number;
+}
+
+export type Query<T> = {
+  [P in keyof T]?: T[P] | queries<T[P]>;
+};
+
+export interface QueryOptions {
+  $skip?: number;
+  $limit?: number;
+  $project?: { [key: string]: boolean };
 }

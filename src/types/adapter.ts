@@ -46,14 +46,14 @@ export interface MigrationParams {
   table: string;
 }
 
-export interface versedbAdapter {
+export interface JsonYamlAdapter {
   load(dataname: string): Promise<AdapterResults>;
   add(dataname: string, newData: any, options?: AdapterUniqueKey): Promise<AdapterResults>;
-  find(dataname: string, query: any): Promise<AdapterResults>;
-  loadAll(dataname: string, displayOptions: queryOptions): Promise<AdapterResults>;
-  remove(dataname: string, query: any, options?: any): Promise<AdapterResults>;
-  update(dataname: string, queries: any, newData: any, upsert: boolean): Promise<AdapterResults>;
-  updateMany(dataname: any, queries: any[any], newData: operationKeys,): Promise<AdapterResults>;
+  find(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<AdapterResults>;
+  loadAll(dataname: string, displayOptions: queryOptions, loadedData?: any[]): Promise<AdapterResults>;
+  remove(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<AdapterResults>;
+  update(dataname: string, queries: any, newData: any, upsert: boolean, loadedData?: any[]): Promise<AdapterResults>;
+  updateMany(dataname: any, queries: any[any], newData: operationKeys, loadedData?: any[]): Promise<AdapterResults>;
   drop(dataname: string): Promise<AdapterResults>;
   search(collectionFilters: CollectionFilter[]): Promise<AdapterResults>;
   dataSize(dataname: string): Promise<AdapterResults>;
@@ -62,6 +62,7 @@ export interface versedbAdapter {
   calculatePolygonArea(polygonCoordinates: any): Promise<AdapterResults>;
   bufferZone(geometry: any, bufferDistance: any): Promise<AdapterResults>;
   batchTasks(operations: any[]): Promise<AdapterResults>;
+  aggregate(dataname: string, pipeline: any[]): Promise<AdapterResults>;
   moveData(from: string, to: string, options: { query?: queryOptions, dropSource?: boolean }): Promise<AdapterResults>;
 }
 
@@ -105,14 +106,23 @@ export interface SearchResult {
 }
 
 export interface operationKeys {
-  $inc?: { [key: string]: number }; 
   $set?: { [key: string]: any };
+  $unset?: { [key: string]: any };
   $push?: { [key: string]: any };
+  $pull?: { [key: string]: any };
+  $addToSet?: { [key: string]: any };
+  $rename?: { [key: string]: string };
   $min?: { [key: string]: any };
   $max?: { [key: string]: any };
+  $mul?: { [key: string]: number };
+  $inc?: { [key: string]: number };
+  $bit?: { [key: string]: any };
   $currentDate?: { [key: string]: boolean | { $type: 'date' | 'timestamp' }};
-  upsert?: boolean;
+  $pop?: { [key: string]: number };
+  $slice?: { [key: string]: [number, number] | number };
+  $sort?: { [key: string]: 1 | -1 };
 }
+
 
 export interface nearbyOptions {
   dataName: string;
@@ -130,4 +140,34 @@ export interface searchFilters {
   pageSize?: number;
   sortOrder?: 'asc' | 'desc';
   displayment?: number | null;
+}
+
+export interface queries<T> {
+  $and?: queries<T>[];
+  $or?: queries<T>[];
+  $validate?: (value: T) => boolean;
+  $text?: string;
+  $sort?: 1 | -1;
+  $slice?: number | [number, number];
+  $some?: boolean;
+  $gt?: number;
+  $lt?: number;
+  $nin?: T[];
+  $exists?: boolean;
+  $not?: queries<T>;
+  $in?: T[];
+  $elemMatch?: queries<T>;
+  $typeOf?: string | 'string' | 'number' | 'boolean' | 'undefined' | 'array' | 'object' | 'null' | 'any';
+  $regex?: string;
+  $size?: number;
+}
+
+export type Query<T> = {
+  [P in keyof T]?: T[P] | queries<T[P]>;
+};
+
+export interface QueryOptions {
+  $skip?: number;
+  $limit?: number;
+  $project?: { [key: string]: boolean };
 }

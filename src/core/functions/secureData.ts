@@ -180,87 +180,92 @@ export async function decodeJSON(
   }
 }
 
-function encrypt(data: Buffer, key: string): Buffer {
-  const keyBuffer = Buffer.from(key);
-  for (let i = 0; i < data.length; i++) {
-    data[i] ^= keyBuffer[i % keyBuffer.length];
+
+export async function encodeYAML(data: any, key: string): Promise<Buffer> {
+  try {
+    const stringedData = yaml.stringify(data);
+    const encryptedData = yamlEncrypt(stringedData, key);
+    return Buffer.from(encryptedData);
+  } catch (error: any) {
+    throw new Error(`Error occurred while encoding YAML data: ${error.message}`);
   }
-  return data;
 }
 
-function decrypt(data: Buffer, key: string): Buffer {
-  return encrypt(data, key);
-}
-
-export async function encodeYAML(yamlData: any, key: string): Promise<Buffer> {
-  const yamlString = yaml.stringify(yamlData);
-  const data = yaml.parse(yamlString);
-  const stringFiedData = yaml.stringify(data);
-  const compressedData = Buffer.from(stringFiedData, "utf-8");
-  return encrypt(compressedData, key);
-}
-
-export async function decodeYAML(filePath: string, key: string): Promise<any> {
+export async function decodeYAML(filePath: string, key: string): Promise<any[] | null> {
   try {
     const buffer = fs.readFileSync(filePath);
-    if (buffer.length === 0) {
-      return [];
-    }
-    const decryptedData = decrypt(buffer, key);
-    const yamlData = decryptedData.toString("utf-8");
-    return yaml.parse(yamlData);
-  } catch (e: any) {
+    const decryptedData = yamlDecrypt(buffer.toString(), key);
+    const parsedData = yaml.parse(decryptedData);
+    return parsedData;
+  } catch (error: any) {
     return null;
   }
 }
+
+function yamlEncrypt(data: string, key: string): string {
+  let encrypted = '';
+  for (let i = 0; i < data.length; i++) {
+    const charCode = data.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+    encrypted += String.fromCharCode(charCode);
+  }
+  return encrypted;
+}
+
+function yamlDecrypt(data: string, key: string): string {
+  return yamlEncrypt(data, key);
+}
+
 export async function encodeSQL(data: string, key: string): Promise<string> {
   let compressedEncodedData = "";
   let count = 1;
   for (let i = 0; i < data.length; i++) {
-    if (data[i] === data[i + 1]) {
-      count++;
-    } else {
-      compressedEncodedData += count + data[i];
-      count = 1;
-    }
+      if (data[i] === data[i + 1]) {
+          count++;
+      } else {
+          if (count > 3) {
+              compressedEncodedData += `#${count}#${data[i]}`;
+          } else {
+              compressedEncodedData += data[i].repeat(count);
+          }
+          count = 1;
+      }
   }
 
   let encodedData = "";
   for (let i = 0; i < compressedEncodedData.length; i++) {
-    const charCode =
-      compressedEncodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-    encodedData += String.fromCharCode(charCode);
+      const charCode = compressedEncodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+      encodedData += String.fromCharCode(charCode);
   }
 
   return encodedData;
 }
 
-export async function decodeSQL(
-  encodedData: string,
-  key: string
-): Promise<any> {
-  try {
-    let decodedData = "";
-    for (let i = 0; i < encodedData.length; i++) {
-      const charCode =
-        encodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+export async function decodeSQL(encodedData: string, key: string): Promise<string> {
+  let decodedData = "";
+  for (let i = 0; i < encodedData.length; i++) {
+      const charCode = encodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
       decodedData += String.fromCharCode(charCode);
-    }
-
-    let decompressedData = "";
-    let i = 0;
-    while (i < decodedData.length) {
-      const count = parseInt(decodedData[i]);
-      const char = decodedData[i + 1];
-      decompressedData += char.repeat(count);
-      i += 2;
-    }
-
-    return decompressedData;
-  } catch (e: any) {
-    return null;
   }
+
+  let decompressedData = "";
+  let i = 0;
+  while (i < decodedData.length) {
+      if (decodedData[i] === '#') {
+          const countStartIndex = i + 1;
+          const countEndIndex = decodedData.indexOf('#', countStartIndex);
+          const count = parseInt(decodedData.substring(countStartIndex, countEndIndex));
+          const char = decodedData[countEndIndex + 1];
+          decompressedData += char.repeat(count);
+          i = countEndIndex + 2;
+      } else {
+          decompressedData += decodedData[i];
+          i++;
+      }
+  }
+
+  return decompressedData;
 }
+
 
 export async function neutralizer(folderPath: string, info: { dataType: "json" | "yaml" | "sql", secret: string }): Promise<string[]> {
 
@@ -320,4 +325,14 @@ export async function neutralizer(folderPath: string, info: { dataType: "json" |
   }
 
   return foundFiles;
+}
+
+
+export function genObjectId(): string {
+  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0');
+  const machineId = 'abcdef'.split('').map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+  const processId = Math.floor(Math.random() * 65536).toString(16).padStart(4, '0');
+  const counter = Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
+
+  return timestamp + machineId + processId + counter;
 }

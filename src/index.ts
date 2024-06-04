@@ -2,8 +2,6 @@
  * @params Copyright(c) 2023 marco5dev & elias79 & kmoshax
  * MIT Licensed
  */
-
-import axios from "axios";
 import * as path from "path";
 import * as fs from "fs";
 import {
@@ -14,12 +12,19 @@ import {
   encodeSQL,
   decodeSQL,
   neutralizer,
-} from "./core/secureData";
+  genObjectId,
+} from "./core/functions/secureData";
+import { verseManagers, Connect } from "./types/versedb.types";
 import connect from "./core/connect";
 import { randomID, randomUUID } from "./lib/id";
-import { logError, logInfo, logSuccess, logWarning } from "./core/logger";
-import Schema from "./core/schema";
-import { SchemaTypes } from "./core/schema";
+import {
+  logError,
+  logInfo,
+  logSuccess,
+  logWarning,
+} from "./core/functions/logger";
+import Schema from "./core/functions/schema";
+import { SchemaTypes } from "./core/functions/schema";
 import colors from "./lib/colors";
 
 const packageJsonPath: string = path.resolve(process.cwd(), "package.json");
@@ -36,20 +41,25 @@ const getLibraryVersion = function (library: string): string {
   return version;
 };
 
-axios
-  .get("https://registry.npmjs.com/-/v1/search?text=verse.db")
-  .then(function (response: any) {
-    const version: string = response.data.objects[0]?.package?.version;
+fetch("https://registry.npmjs.com/-/v1/search?text=verse.db")
+  .then(function (response) {
+    if (!response.ok) {
+      throw new Error("Failed to fetch");
+    }
+    return response.json();
+  })
+  .then(function (data) {
+    const version = data.objects[0]?.package?.version;
     if (version && getLibraryVersion("verse.db") !== version) {
       logWarning({
         content:
           `Please Update verse.db to the latest verseion ` +
           version +
-          `  using ${colors.fg.green}npm install verse.db@latest${colors.reset}`,
+          `\nusing ${colors.fg.green}npm install verse.db@latest${colors.reset}`,
       });
     }
   })
-  .catch(function (error: any) {
+  .catch(function (error) {
     logError({
       content: error,
     });
@@ -70,6 +80,7 @@ const verseParser = {
   encodeSQL,
   decodeSQL,
   neutralizer,
+  genObjectId,
 };
 
 const versedb = {
@@ -81,6 +92,8 @@ const versedb = {
   SchemaTypes,
   verseParser,
   colors,
+  neutralizer,
+  genObjectId,
 };
 export {
   connect,
@@ -92,5 +105,9 @@ export {
   SchemaTypes,
   colors,
   neutralizer,
+  genObjectId,
+  Connect,
+  verseManagers,
 };
+
 export default versedb;

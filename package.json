@@ -1,6 +1,6 @@
 {
   "name": "verse.db",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "verse.db isn't just a database, it's your universal data bridge. Designed for unmatched flexibility, security, and performance, verse.db empowers you to manage your data with ease.",
   "license": "MIT",
   "author": "marco5dev (Mark Maher)",
@@ -27,7 +27,7 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --build --force",
     "test": "jest --forceExit"
   },
   "funding": "https://github.com/sponsors/jedi-studio",
@@ -41,7 +41,6 @@
     "typescript": "^5.4.2"
   },
   "dependencies": {
-    "axios": "^1.6.8",
     "yaml": "^2.4.1"
   },
   "keywords": [
@@ -50,8 +49,21 @@
     "relational database",
     "non-relational database",
     "sql",
-    "SQON",
-    "sqon",
+    "verse",
+    "verse.db",
+    "versedb",
+    "verse.data",
+    "verse data",
+    "verseDatabase",
+    "verse database",
+    "verse manager",
+    "data",
+    "data management",
+    "database manager",
+    "data manager",
+    "database management",
+    "SQOL",
+    "sqol",
     "nosql",
     "data schema",
     "data model",

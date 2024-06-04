@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { EventEmitter } from "events";
-import { logError, logInfo, logSuccess, logWarning } from "../core/logger";
+import { logError, logInfo, logSuccess, logWarning } from "../core/functions/logger";
 import { AdapterResults, SQLAdapter, operationKeys } from "../types/adapter";
 import { randomUUID } from "../lib/id";
 import {
@@ -11,7 +11,7 @@ import {
   MigrationParams,
   searchFilters,
 } from "../types/adapter";
-import { encodeSQL, decodeSQL, encodeJSON } from "../core/secureData";
+import { encodeSQL, decodeSQL, encodeJSON } from "../core/functions/secureData";
 import { SecureSystem } from "../types/connect";
 
 export class sqlAdapter extends EventEmitter implements SQLAdapter {
@@ -281,7 +281,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     }
   }
 
-  async find(
+  public async find(
     dataname: string,
     tableName: string,
     condition?: string
@@ -566,7 +566,7 @@ export class sqlAdapter extends EventEmitter implements SQLAdapter {
     dataname: string,
     tableName: string,
     query: any,
-    newData: operationKeys
+    newData: any
   ): Promise<AdapterResults> {
     const fileContentResult = await this.load(dataname);
     if (!fileContentResult.acknowledged) {

@@ -1,22 +1,15 @@
-import { PathLike } from "fs";
+import { JSONAdapter, SQLAdapter, YAMLAdapter } from "./connect";
 
 export interface Connect {
-  options: versedbOptions;
-  backaupFolder?: PathLike | undefined;
+  adapter: 'json' | 'yaml' | 'sql' | string;
+  dataPath: string;
+  devLogs?: { enable: boolean, path: string };
+  secure?: { enable: boolean, secret?: string };
+  backup?: any;
 }
 
-export interface versedbOptions {
-  adapter: Adapter;
-  backaupFolder?: PathLike;
-}
-
-export interface Adapter {
-  filePath: string;
-  devLogs: boolean;
-  logsPath?: string;
-}
-
-export interface versedbFindOptions {
-  first: boolean;
-  limit: number;
-}
+export interface verseManagers {
+  JsonManager?: JSONAdapter;
+  YamlManager?: YAMLAdapter;
+  SqlManager?: SQLAdapter;
+ }
