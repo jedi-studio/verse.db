@@ -16,7 +16,11 @@ import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 import { decodeYAML, encodeYAML } from "../core/functions/secureData";
 import { nearbyOptions, SecureSystem } from "../types/connect";
 import { opSet, opInc, opPush, opUnset, opPull, opRename, opAddToSet, opMin, opMax, opMul, opBit, opCurrentDate, opPop, opSlice, opSort } from "../core/functions/operations";
-
+type AggregationExpression = {
+  $sum?: string;
+  $avg?: string;
+  // Add other aggregation operators as needed
+};
 export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
   public secure: SecureSystem = { enable: false, secret: "" };
