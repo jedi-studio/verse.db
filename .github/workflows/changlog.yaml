@@ -3,6 +3,8 @@ name: Update Changelog
 on:
   push:
     tags: [ v*.* ]  # Triggers on pushing tags starting with "v"
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
 
 jobs:
   update-changelog:
