@@ -3,8 +3,6 @@ name: Update Changelog
 on:
   push:
     tags: [ v*.* ]  # Triggers on pushing tags starting with "v"
-  pull_request_target:
-    types: [opened, reopened, synchronize, edited]
 
 jobs:
   update-changelog:
@@ -22,6 +20,12 @@ jobs:
 
           # Get the previous tag
           previous_tag=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+' | grep -v ${{ github.ref_name }} | head -n 1)
+          
+          # Ensure the tag is not empty
+          if [ -z "$previous_tag" ]; then
+            echo "No previous tag found"
+            exit 1
+          fi
 
           echo "previousTag: $previous_tag"
           echo "previousTag=$previous_tag" >> $GITHUB_ENV
@@ -30,7 +34,7 @@ jobs:
         id: changelog
         uses: requarks/changelog-action@v1
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           fromTag: ${{ env.previousTag }}
           toTag: ${{ github.ref_name }}
           writeToFile: true
