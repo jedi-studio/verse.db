@@ -3,6 +3,8 @@ name: Update Changelog
 on:
   push:
     tags:   # Triggers on pushing any tag
+  release:
+    types: [published, edited, created, released, prereleased]  # Triggers on various release events
 
 jobs:
   update-changelog:
@@ -18,8 +20,13 @@ jobs:
           # Fetch all tags
           git fetch --tags
 
-          # Get the current tag
-          current_tag=$(git describe --tags --abbrev=0)
+          # Get the current tag from the release event, if available
+          if [ "${{ github.event.release.tag_name }}" != "" ]; then
+            current_tag="${{ github.event.release.tag_name }}"
+          else
+            # If not triggered by a release event, use the latest tag
+            current_tag=$(git describe --tags --abbrev=0)
+          fi
 
           # Get the previous tag
           previous_tag=$(git tag --sort=-creatordate | grep -v "^${current_tag}$" | head -n 1)
