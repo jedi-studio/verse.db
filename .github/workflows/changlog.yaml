@@ -2,7 +2,9 @@ name: Update Changelog
 
 on:
   push:
-    tags: [ v*.* ]  # Triggers on pushing tags starting with "v"
+    tags:   # Triggers on pushing any tag
+  release:
+    types: [published, edited, created, released, prereleased]  # Triggers on various release events
 
 jobs:
   update-changelog:
@@ -15,17 +17,36 @@ jobs:
       - name: Get previous tag
         id: previousTag
         run: |
-          name=$(git --no-pager tag --sort=creatordate --merged ${{ github.ref_name }} | tail -2 | head -1)
-          echo "previousTag: $name"
-          echo "previousTag=$name" >> $GITHUB_ENV
+          # Fetch all tags
+          git fetch --tags
+
+          # Get the current tag from the release event, if available
+          if [ "${{ github.event.release.tag_name }}" != "" ]; then
+            current_tag="${{ github.event.release.tag_name }}"
+          else
+            # If not triggered by a release event, use the latest tag
+            current_tag=$(git describe --tags --abbrev=0)
+          fi
+
+          # Get the previous tag
+          previous_tag=$(git tag --sort=-creatordate | grep -v "^${current_tag}$" | head -n 1)
+
+          # Ensure the previous tag is not empty
+          if [ -z "$previous_tag" ]; then
+            echo "No previous tag found, possibly first release."
+            previous_tag=$(git rev-list --max-parents=0 HEAD)  # Use initial commit if no previous tag
+          fi
+
+          echo "previousTag: $previous_tag"
+          echo "previousTag=$previous_tag" >> $GITHUB_ENV
 
       - name: Update CHANGELOG
         id: changelog
         uses: requarks/changelog-action@v1
         with:
-          token: ${{ github.token }}
-          fromTag: ${{ github.ref_name }}
-          toTag: ${{ env.previousTag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fromTag: ${{ env.previousTag }}
+          toTag: ${{ github.ref_name }}
           writeToFile: true
 
       - name: Commit changes
