@@ -1,4 +1,4 @@
-name: Pull Request Testing of the Verse.db
+name: Pull Request Testing of the Verse.db (Production)
 
 on:
   pull_request:
