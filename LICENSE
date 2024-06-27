@@ -1,21 +1,38 @@
-MIT License
+MIT License for VERSE.DB
 
 Copyright (c) 2023 Mark Maher
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+in the Software with the following restrictions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. **Naming Restriction**: 
+   - No person or entity is permitted to use the name "verse.db" or any names that are similar in nature (e.g., "verse.data", "verse.database") for any other projects, software, or products without explicit written permission from the copyright holder. This includes but is not limited to names that could potentially cause confusion or imply association with the original software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. **License Inclusion**:
+   - Any person or entity using this software must include this license in their software. The inclusion must be clear and prominent, ensuring that end users are aware of the licensing terms.
+
+3. **Contribution**:
+   - Contributions to the repository are encouraged. Any person or entity wishing to contribute can do so by cloning the repository and making a new pull request with the proposed changes. All contributions must be original work and must not infringe on any third-party rights.
+   - By submitting a pull request, the contributor agrees to transfer all rights and ownership of the contributed code to the copyright holder, and the contribution will be licensed under the same terms as the original software.
+
+4. **Code Usage Restriction**:
+   - No person or entity is allowed to steal, copy, or use the code from this software in any other project, repository, or product without explicit written permission from the copyright holder. Unauthorized use, copying, or distribution of the code, in whole or in part, is strictly prohibited.
+   - This restriction applies to all forms of the code, including but not limited to source code, compiled code, and any derivative works.
+
+5. **Data Privacy and Security**:
+   - Users of this software must implement appropriate measures to ensure the privacy and security of any data processed or stored using the software. This includes, but is not limited to, implementing encryption, access controls, and regular security assessments.
+   - Any security vulnerabilities discovered in the software must be reported to the copyright holder immediately. Users must refrain from exploiting any such vulnerabilities for any unauthorized purposes.
+
+6. **Non-Commercial Use**:
+   - The software may not be used for commercial purposes without explicit written permission from the copyright holder. Commercial use includes but is not limited to selling, licensing, or otherwise monetizing the software or any derivative works.
+
+7. **Liability and Warranty**:
+   - THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   - Users of the software agree to indemnify and hold harmless the copyright holder from any claims, damages, or liabilities arising out of the use of the software.
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+If you have any questions or need further assistance regarding this license, please contact Mark Maher at support@jedi-studio.com.
