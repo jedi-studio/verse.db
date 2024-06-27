@@ -2,9 +2,8 @@ name: Update Changelog
 
 on:
   push:
-    tags:   # Triggers on pushing any tag
   release:
-    types: [published, edited, created, released, prereleased]  # Triggers on various release events
+    types: [published, edited, released]  # Triggers on various release events
 
 jobs:
   update-changelog:
