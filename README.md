@@ -80,7 +80,7 @@ Note\*: You can create multiple databases simultaneously with/without the same e
 
 For detailed information on usage, operations, and methods, visit [Verse.db Documentation](https://versedb.jedi-studio.com). Unlock the full potential of Verse.db and elevate your data management experience today!
 
-### Soon: SQOL
+### Soon: SQON
 
-- In the future updates we will introduce our new brand database SQOL: (Structured Query Object Language). Stay tuned ;).
+- In the future updates we will introduce our new brand database SQON: (Structured Query Object Notation). Stay tuned ;).
 - Check it out its structure on [Git-Hub](https://github.com/jedi-studio/).
