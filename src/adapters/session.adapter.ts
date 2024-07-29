@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import { EventEmitter } from "events";
-import Redis from "redis";
 import { logError, logInfo, logSuccess } from "../core/functions/logger";
 import {
   DevLogsOptions,
@@ -21,11 +20,10 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
   private ttl: number;
   private sessions: Map<string, { data: SessionData; expiry: number | null }>;
   private useMemory: boolean;
-  private redisClient: any;
 
   /**
    * Create a new SessionAdapter instance
-   * @param {AdapterSetting & { secure: SecureSystem, maxSize?: number, ttl?: number, useMemory?: boolean, redisConfig?: Redis.ClientOpts }} options - Session settings including security options, max size, time-to-live, in-memory caching, and Redis configuration
+   * @param {AdapterSetting & { secure: SecureSystem, maxSize?: number, ttl?: number, useMemory?: boolean }} options - Session settings including security options, max size, time-to-live, in-memory caching
    */
   constructor(
     options: AdapterSetting & {
@@ -33,7 +31,6 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
       maxSize?: number;
       ttl?: number;
       useMemory?: boolean;
-      redisConfig?: any;
     }
   ) {
     super();
@@ -43,9 +40,6 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
     this.maxSize = options.maxSize || 1000;
     this.ttl = options.ttl || 0;
     this.useMemory = options.useMemory || false;
-    this.redisClient = options.redisConfig
-      ? Redis.createClient(options.redisConfig)
-      : null;
     this.sessions = new Map();
 
     if (this.devLogs.enable && !this.devLogs.path) {
