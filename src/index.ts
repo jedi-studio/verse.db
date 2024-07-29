@@ -14,7 +14,7 @@ import {
   neutralizer,
   genObjectId,
 } from "./core/functions/secureData";
-import { verseManagers, Connect } from "./types/versedb.types";
+import { verseManagers, verseConnector } from "./types/versedb.types";
 import connect from "./core/connect";
 import { randomID, randomUUID } from "./lib/id";
 import {
@@ -26,6 +26,11 @@ import {
 import Schema from "./core/functions/schema";
 import { SchemaTypes } from "./core/functions/schema";
 import colors from "./lib/colors";
+import { SQLSchema } from "./core/functions/SQL-Schemas";
+import {
+  sessionAdapter as session,
+  CacheAdapter as cache,
+} from "./adapters/export";
 
 const packageJsonPath: string = path.resolve(process.cwd(), "package.json");
 const packageJson: any = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
@@ -55,7 +60,7 @@ fetch("https://registry.npmjs.com/-/v1/search?text=verse.db")
         content:
           `Please Update verse.db to the latest verseion ` +
           version +
-          `\nusing ${colors.fg.green}npm install verse.db@latest${colors.reset}`,
+          `  using ${colors.fg.green}npm install verse.db@latest${colors.reset}`,
       });
     }
   })
@@ -94,6 +99,9 @@ const versedb = {
   colors,
   neutralizer,
   genObjectId,
+  SQLSchema,
+  session,
+  cache,
 };
 export {
   connect,
@@ -106,8 +114,11 @@ export {
   colors,
   neutralizer,
   genObjectId,
-  Connect,
+  verseConnector,
   verseManagers,
+  SQLSchema,
+  session,
+  cache,
 };
 
 export default versedb;
