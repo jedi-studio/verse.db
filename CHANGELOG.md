@@ -1,6 +1,23 @@
-# Verse.db [Beta]
+# Verse.db
 
 ### Change log:
+
+## v2.3 [Beta]
+
+- Added new adapter "Session" Adapter
+- Added new adapter "Cache" Adapter
+- Added redis for more advanced adapter for "Session" adapter
+- New SQL Adapter
+
+## Version v2.2
+
+- Fixed batchTasks in json/yaml.
+- Fixed types.
+- Fixed events.
+- Remodelled SQL (from scratch).
+- Added Schema and schemaless SQL.
+- New branded SQL as JSON.
+- Made new secure for data for sql files
 
 ## Version v2.1
 
@@ -12,10 +29,14 @@
 - Fixed Types.
 - Fixed dropData.
 - Fixed search.
+- Fixed Real-time data.
+- Fixed Find operation Keys
+- Fixed Unique Keys for add method and schema
+- Fixed remove method in JSON/Yaml adapter.
 
 ## Version v2.0
 
-- Added real-time data store, whcihs uses db.watch('dataname')
+- Added real-time data store, which uses db.watch('dataname')
 - Added more operations for each adapter, such as: [batchTasks, dataSize, docCount, search, join].
 - Fixed Minor bugs in Connection and types.
 - Added back the uniqueKeys for schemaless data.
@@ -25,7 +46,7 @@
 - Made `npm create verse.db@latest` for easier setup and configuration for your data connection,
 - Added More options, and filters for find and load all data.
 - Added Move Data for json and yaml. now you can move specific query or full data from place to another.
-- Added Functionality to remove secure from specifc files and store them into their original files.
+- Added Functionality to remove secure from specific files and store them into their original files.
 - Fixed Bugs in update and updateMany functionality for JSON and YAML adapter.
 - Fixed logger became optional.
 - Updated SecureData functionality for SQL.
@@ -40,7 +61,7 @@
 - Securing Database.
 - No more `json`/`yaml`/`sql` file extension. Database became (`.verse`)
 
-## Verseion 1.0
+## Version 1.0
 
 - going from `jsonverse` to `VERSE.DB`
 - add `json` adapter
@@ -58,7 +79,7 @@
 - Setup `xlsx` to the database
 - Setup `csv` to the database
 - Setup `SQL` to the database
-- Improving database stablity
+- Improving database stability
 - Improving database speed
 - Database is now working `inside` & `outside` the module
 
