@@ -5,6 +5,11 @@ import { jsonAdapter } from "../adapters/json.adapter";
 import { yamlAdapter } from "../adapters/yaml.adapter";
 import { sqlAdapter } from "../adapters/sql.adapter";
 
+export interface CacheData {
+  [key: string]: any;
+}
+
+
 export interface JSONAdapter {
   load(dataname: string): Promise<any[]>;
   findCollection(dataname: string): Promise<void>;
@@ -104,6 +109,32 @@ export interface YAMLAdapter {
   ): Promise<any>;
   model(dataname: string, schema: any): any;
 }
+export interface SESSIONAdapter {
+  load(sessionId: string): Promise<void>;
+  add(sessionId: string, sessionData: SessionData): Promise<void>;
+  drop(sessionId: string): Promise<void>;
+  clear(): Promise<void>;
+  stats(): Promise<void>;
+  invalidate(
+    predicate: (key: string, data: SessionData) => boolean
+  ): Promise<void>;
+  regenerateSessionId(
+    oldSessionId: string,
+    newSessionId: string
+  ): Promise<void>;
+  expressMiddleware(): Function;
+  nextMiddleware(): Function;
+}
+export interface CACHEAdapter {
+  load(key: string): Promise<void>;
+  add(key: string, data: CacheData): Promise<void>;
+  drop(key: string): Promise<void>;
+  stats(): Promise<void>;
+  clear(): Promise<void>;
+  invalidate(
+    predicate: (key: string, data: CacheData) => boolean
+  ): Promise<void>;
+}
 export interface SQLAdapter {
   loadData(dataname: string, schema: SQLSchema): Promise<void>;
   findCollection(dataname: string): Promise<void>;
@@ -197,6 +228,9 @@ export interface AdapterOptions {
   devLogs?: DevLogsOptions;
   secure?: SecureSystem;
   backup?: BackupOptions;
+  maxSize?: number;
+  ttl?: number;
+  useMemory?: boolean;
 }
 
 export interface CollectionFilter {

@@ -12,13 +12,19 @@ import {
   StructureMethods,
   ModelMethods,
 } from "../types/connect";
-import { MigrationPath, nearbyOptions, TableOptions } from "../types/adapter";
+import {
+  MigrationPath,
+  nearbyOptions,
+  SessionData,
+  TableOptions,
+} from "../types/adapter";
 import Schema from "./functions/schema";
 import {
   jsonAdapter,
   yamlAdapter,
   sqlAdapter,
   sessionAdapter,
+  CacheAdapter,
 } from "../adapters/export";
 import { logError } from "./functions/logger";
 import EventEmitter from "events";
@@ -28,8 +34,13 @@ import { SQLSchema } from "./functions/SQL-Schemas";
  * The main connect class for interacting with the database
  */
 export default class connect extends EventEmitter {
-  public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null; // i tried to fix it can you do ? i did and i faied somehow and when i asked GPT he told me not to
-  public sessionAdapter: sessionAdapter | null = null; // np
+  public adapter:
+    | jsonAdapter
+    | yamlAdapter
+    | sqlAdapter
+    | sessionAdapter
+    | CacheAdapter
+    | null = null;
   public devLogs: DevLogsOptions;
   public SecureSystem: SecureSystem;
   public backup: BackupOptions;
@@ -37,6 +48,9 @@ export default class connect extends EventEmitter {
   public fileType: string = "";
   public adapterType: string = "";
   public key: string;
+  public maxSize: number = 10;
+  public ttl: number = 10000;
+  public useMemory: boolean = false;
 
   /**
    * Sets up a database with one of the adapters
@@ -52,6 +66,9 @@ export default class connect extends EventEmitter {
       ? this.SecureSystem.secret || "versedb"
       : "versedb";
     this.backup = options.backup ?? { enable: false, path: "", retention: 0 };
+    this.maxSize = options.maxSize ?? 10;
+    this.ttl = options.ttl ?? 10000;
+    this.useMemory = options.useMemory ?? false;
 
     const adapterOptions = {
       devLogs: {
@@ -61,24 +78,55 @@ export default class connect extends EventEmitter {
       dataPath: this.dataPath,
     };
 
+    const sessionAdapterOptions = {
+      devLogs: {
+        enable: this.devLogs?.enable,
+        path: this.devLogs?.path,
+      },
+      dataPath: this.dataPath,
+      maxSize: this.maxSize,
+      ttl: this.ttl,
+      useMemory: this.useMemory,
+    };
+
+    const cacheAdapterOptions = {
+      devLogs: {
+        enable: this.devLogs?.enable,
+        path: this.devLogs?.path,
+      },
+      dataPath: this.dataPath,
+      maxSize: this.maxSize,
+      ttl: this.ttl,
+    };
+
     switch (options.adapter) {
       case "json":
         this.adapter = new jsonAdapter(adapterOptions, this.SecureSystem);
-        this.sessionAdapter = null;
         this.fileType = this.SecureSystem?.enable ? "verse" : "json";
         this.adapterType = "json";
         break;
       case "yaml":
         this.adapter = new yamlAdapter(adapterOptions, this.SecureSystem);
-        this.sessionAdapter = null;
         this.fileType = this.SecureSystem?.enable ? "verse" : "yaml";
         this.adapterType = "yaml";
         break;
       case "sql":
         this.adapter = new sqlAdapter(adapterOptions, this.SecureSystem);
-        this.sessionAdapter = null;
         this.fileType = this.SecureSystem?.enable ? "verse" : "sql";
         this.adapterType = "sql";
+        break;
+      case "session":
+        this.adapter = new sessionAdapter(
+          sessionAdapterOptions,
+          this.SecureSystem
+        );
+        this.fileType = this.SecureSystem?.enable ? "verse" : "json";
+        this.adapterType = "json";
+        break;
+      case "cache":
+        this.adapter = new CacheAdapter(cacheAdapterOptions);
+        this.fileType = this.SecureSystem?.enable ? "verse" : "json";
+        this.adapterType = "json";
         break;
       default:
         logError({
@@ -171,10 +219,17 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
-
     return await this.adapter?.findCollection(dataname, check);
   }
 
@@ -187,9 +242,18 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
+
     return await this.adapter?.updateCollection(dataname, newDataName);
   }
 
@@ -251,8 +315,16 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -289,8 +361,16 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -323,8 +403,16 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -358,8 +446,16 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -389,8 +485,16 @@ export default class connect extends EventEmitter {
         throwErr: true,
       });
     }
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     return await this.adapter?.batchTasks(operations);
@@ -411,8 +515,16 @@ export default class connect extends EventEmitter {
         throwErr: true,
       });
     }
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -455,8 +567,16 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -501,6 +621,44 @@ export default class connect extends EventEmitter {
   }
 
   /**
+   * Clear all sessions
+   * @returns {Promise<AdapterResults>} - A Promise that resolves when all sessions are cleared
+   */
+  async clear() {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    if (
+      this.adapter instanceof jsonAdapter ||
+      this.adapter instanceof sqlAdapter ||
+      this.adapter instanceof yamlAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    try {
+      return await this.adapter.clear();
+    } catch (error) {
+      logError({
+        content: `Error dropping data: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
    * full search method to find in all the database
    * @param collectionFilters filters for search in all the database
    * @returns search in all the database files
@@ -513,10 +671,17 @@ export default class connect extends EventEmitter {
         throwErr: true,
       });
     }
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
-
     if (
       !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.search === "function"
@@ -730,8 +895,16 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -764,8 +937,16 @@ export default class connect extends EventEmitter {
       });
     }
 
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     if (
@@ -796,8 +977,17 @@ export default class connect extends EventEmitter {
         throwErr: true,
       });
     }
-    if (this.adapter instanceof sessionAdapter) {
-      return null;
+
+    if (
+      this.adapter instanceof sessionAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
     }
 
     const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
@@ -1361,6 +1551,164 @@ export default class connect extends EventEmitter {
   }
 
   /**
+   * Invalidate sessions based on a predicate function
+   * @param {(key: string, data: SessionData) => boolean} predicate - The predicate function to determine which sessions to invalidate
+   * @returns {Promise<AdapterResults>} - A Promise that resolves when sessions are invalidated
+   */
+  async invalidate(predicate: (key: string, data: SessionData) => boolean) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    if (
+      this.adapter instanceof jsonAdapter ||
+      this.adapter instanceof sqlAdapter ||
+      this.adapter instanceof yamlAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    try {
+      return await this.adapter.invalidate(predicate);
+    } catch (error) {
+      logError({
+        content: `Error dropping data: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Integrate with Express middleware
+   * @returns {function} - The Express middleware function
+   */
+  async expressMiddleware() {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    if (
+      this.adapter instanceof jsonAdapter ||
+      this.adapter instanceof sqlAdapter ||
+      this.adapter instanceof yamlAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    try {
+      return await this.adapter.expressMiddleware();
+    } catch (error) {
+      logError({
+        content: `Error dropping data: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Integrate with Next.js middleware
+   * @returns {function} - The Next.js middleware function
+   */
+  async nextMiddleware() {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    if (
+      this.adapter instanceof jsonAdapter ||
+      this.adapter instanceof sqlAdapter ||
+      this.adapter instanceof yamlAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    try {
+      return await this.adapter.nextMiddleware();
+    } catch (error) {
+      logError({
+        content: `Error dropping data: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Regenerate session ID to prevent fixation attacks
+   * @param {string} oldSessionId - The old session ID
+   * @param {string} newSessionId - The new session ID
+   * @returns {Promise<AdapterResults>} - A Promise that resolves when the session ID is regenerated
+   */
+  async regenerateSessionId(oldSessionId: string, newSessionId: string) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    if (
+      this.adapter instanceof jsonAdapter ||
+      this.adapter instanceof sqlAdapter ||
+      this.adapter instanceof yamlAdapter ||
+      this.adapter instanceof CacheAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    try {
+      return await this.adapter.regenerateSessionId(oldSessionId, newSessionId);
+    } catch (error) {
+      logError({
+        content: `Error dropping data: ${error}`,
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
    * Counts the number of tables in the specified data file.
    *
    * @param {string} dataname - The name of the data file to count tables in.
@@ -1418,6 +1766,44 @@ export default class connect extends EventEmitter {
     } else {
       logError({
         content: "DocsCount operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Clear the the data in the memory
+   * @returns empty the file you dropped
+   */
+  async stats() {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    if (
+      this.adapter instanceof jsonAdapter ||
+      this.adapter instanceof sqlAdapter ||
+      this.adapter instanceof yamlAdapter
+    ) {
+      logError({
+        content: "This function is not available for this adapter",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+      return;
+    }
+
+    try {
+      return await this.adapter.stats();
+    } catch (error) {
+      logError({
+        content: `Error dropping data: ${error}`,
         devLogs: this.devLogs,
         throwErr: true,
       });
