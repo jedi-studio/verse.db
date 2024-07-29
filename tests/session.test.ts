@@ -1,22 +1,21 @@
 import fs from "fs";
 import versedb from "../src/index";
 import { SessionAdapter, SessionData } from "../src/types/adapter";
-const testDir = "./tests/session/data";
 
 describe("SessionAdapter", () => {
   const adapterOptions = {
-    dataPath: testDir,
+    dataPath: "./tests/session/data",
     maxSize: 10,
-    ttl: 10000, // 10 seconds TTL
+    ttl: 10000,
     devLogs: { enable: false, path: "" },
   };
   let adapter: SessionAdapter;
 
   beforeAll(() => {
-    if (fs.existsSync(testDir)) {
-      fs.promises.rmdir(testDir, { recursive: true });
+    if (fs.existsSync("./tests/session/data")) {
+      fs.promises.rmdir("./tests/session/data", { recursive: true });
     }
-    fs.promises.mkdir(testDir, { recursive: true });
+    fs.promises.mkdir("./tests/session/data", { recursive: true });
     adapter = new versedb.session(adapterOptions, {
       enable: false,
       secret: "",
@@ -24,8 +23,8 @@ describe("SessionAdapter", () => {
   });
 
   afterAll(() => {
-    if (fs.existsSync(testDir)) {
-      fs.promises.rm(testDir, { recursive: true });
+    if (fs.existsSync("./tests/session")) {
+      fs.promises.rm("./tests/session", { recursive: true, force: true });
     }
   });
 
