@@ -3,7 +3,6 @@ import { CacheAdapter, CacheData } from "../src/types/adapter";
 
 describe("CacheAdapter", () => {
   const adapterOptions = {
-
     maxSize: 2,
     ttl: 10000,
     devLogs: { enable: false, path: "" },
@@ -14,8 +13,8 @@ describe("CacheAdapter", () => {
     cacheAdapter = new versedb.cache(adapterOptions);
   });
 
-  afterAll(() => {
-    cacheAdapter.clear()
+  afterAll(async () => {
+    await cacheAdapter.clear();
   });
 
   test("add a cache entry", async () => {
@@ -108,7 +107,9 @@ describe("CacheAdapter", () => {
   });
 
   test("handle devLogs error", () => {
-    jest.spyOn(console, "error").mockImplementation(() => {}); // Mock console.error
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {}); // Mock console.error
 
     expect(() => {
       new versedb.cache({
@@ -116,6 +117,8 @@ describe("CacheAdapter", () => {
         maxSize: 2,
         ttl: 10000,
       });
-    }).toThrowError("You need to provide a logs path if devLogs is enabled.");
+    }).toThrow("You need to provide a logs path if devLogs is enabled.");
+
+    consoleErrorSpy.mockRestore();
   });
 });
