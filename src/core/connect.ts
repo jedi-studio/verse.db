@@ -488,20 +488,12 @@ export default class connect extends EventEmitter {
       return;
     }
 
-    if ("drop" in this.adapter && typeof this.adapter.drop === "function") {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      try {
-        await this.adapter.drop(filePath);
-      } catch (error) {
-        logError({
-          content: `Error dropping data: ${error}`,
-          devLogs: this.devLogs,
-          throwErr: true,
-        });
-      }
-    } else {
+    const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+    try {
+      return await this.adapter.drop(filePath);
+    } catch (error) {
       logError({
-        content: "Drop operation not supported by this adapter.",
+        content: `Error dropping data: ${error}`,
         devLogs: this.devLogs,
         throwErr: true,
       });
