@@ -27,15 +27,15 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
    */
   constructor(
     options: AdapterSetting & {
-      secure: SecureSystem;
       maxSize?: number;
       ttl?: number;
       useMemory?: boolean;
-    }
+    },
+    key: SecureSystem
   ) {
     super();
     this.devLogs = options.devLogs;
-    this.secure = options.secure;
+    this.secure = key;
     this.dataPath = options.dataPath || "./sessions";
     this.maxSize = options.maxSize || 1000;
     this.ttl = options.ttl || 0;
@@ -218,11 +218,11 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
   }
 
   /**
-   * Destroy a session by ID
+   * drop a session by ID
    * @param {string} sessionId - The session ID
-   * @returns {Promise<AdapterResults>} - A Promise that resolves when the session is destroyed
+   * @returns {Promise<AdapterResults>} - A Promise that resolves when the session is droped
    */
-  public async destroy(sessionId: string): Promise<AdapterResults> {
+  public async drop(sessionId: string): Promise<AdapterResults> {
     this.sessions.delete(sessionId);
     const sessionFilePath = this.getSessionFilePath(sessionId);
 
@@ -230,12 +230,12 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
       if (fs.existsSync(sessionFilePath)) {
         fs.unlinkSync(sessionFilePath);
         logSuccess({
-          content: `Session ${sessionId} destroyed`,
+          content: `Session ${sessionId} droped`,
           devLogs: this.devLogs,
         });
         return {
           acknowledged: true,
-          message: `Session ${sessionId} destroyed`,
+          message: `Session ${sessionId} droped`,
         };
       } else {
         return {
@@ -245,12 +245,12 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
       }
     } catch (err) {
       logError({
-        content: `Failed to destroy session ${sessionId}: ${err}`,
+        content: `Failed to drop session ${sessionId}: ${err}`,
         devLogs: this.devLogs,
       });
       return {
         acknowledged: false,
-        errorMessage: `Failed to destroy session ${sessionId}: ${err}`,
+        errorMessage: `Failed to drop session ${sessionId}: ${err}`,
       };
     }
   }
@@ -291,7 +291,7 @@ export class sessionAdapter extends EventEmitter implements ISessionAdapter {
    * Get statistics about the session store
    * @returns {Promise<AdapterResults>} - A Promise that resolves with session statistics
    */
-  public async getStatistics(): Promise<AdapterResults> {
+  public async stats(): Promise<AdapterResults> {
     try {
       const files = fs.readdirSync(this.dataPath);
       return {

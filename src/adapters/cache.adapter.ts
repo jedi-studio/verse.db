@@ -125,20 +125,20 @@ export class CacheAdapter extends EventEmitter implements ICacheAdapter {
   }
 
   /**
-   * Destroy a cache entry by key
+   * drop a cache entry by key
    * @param {string} key - The key of the cache entry
-   * @returns {Promise<AdapterResults>} - A Promise that resolves when the cache entry is destroyed
+   * @returns {Promise<AdapterResults>} - A Promise that resolves when the cache entry is droped
    */
-  public async destroy(key: string): Promise<AdapterResults> {
+  public async drop(key: string): Promise<AdapterResults> {
     if (this.cache.has(key)) {
       this.cache.delete(key);
       logSuccess({
-        content: `Cache entry ${key} destroyed`,
+        content: `Cache entry ${key} droped`,
         devLogs: this.devLogs,
       });
       return {
         acknowledged: true,
-        message: `Cache entry ${key} destroyed`,
+        message: `Cache entry ${key} droped`,
       };
     } else {
       return {
