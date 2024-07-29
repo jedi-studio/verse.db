@@ -21,7 +21,13 @@ export class CacheAdapter extends EventEmitter implements ICacheAdapter {
    * Create a new CacheAdapter instance
    * @param {AdapterSetting & { maxSize?: number, ttl?: number }} options - Cache settings including maxSize and ttl
    */
-  constructor(options: AdapterSetting & { maxSize?: number; ttl?: number }) {
+  constructor(
+    options: AdapterSetting & {
+      dataPath?: string;
+      maxSize?: number;
+      ttl?: number;
+    }
+  ) {
     super();
     this.devLogs = options.devLogs;
     this.cache = new Map();

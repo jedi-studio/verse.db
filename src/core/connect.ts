@@ -94,7 +94,7 @@ export default class connect extends EventEmitter {
         enable: this.devLogs?.enable,
         path: this.devLogs?.path,
       },
-      dataPath: this.dataPath,
+      dataPath: "",
       maxSize: this.maxSize,
       ttl: this.ttl,
     };
