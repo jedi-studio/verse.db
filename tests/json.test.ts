@@ -5,7 +5,7 @@ async function Setup(adapter: string): Promise<any> {
   const adapterOptions = {
     adapter: `${adapter}`,
     dataPath: `./tests/${adapter}/data`,
-    devLogs: { enable: true, path: `./tests/${adapter}/logs` },
+    devLogs: { enable: false, path: `./tests/${adapter}/logs` },
     secure: {
       enable: true,
       secret: "versedb",
