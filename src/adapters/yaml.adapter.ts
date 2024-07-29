@@ -1,18 +1,19 @@
 import fs from "fs";
 import path from "path";
-import yaml from "yaml";
 import { EventEmitter } from "events";
 import { logError, logInfo, logSuccess } from "../core/functions/logger";
 import { randomUUID } from "../lib/id";
 import {
   AdapterResults,
   AdapterUniqueKey,
+  JsonYamlAdapter,
   CollectionFilter,
   SearchResult,
   queryOptions,
-  JsonYamlAdapter,
+  operationKeys,
   groupExp,
 } from "../types/adapter";
+import yaml from "yaml";
 import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 import { decodeYAML, encodeYAML } from "../core/functions/secureData";
 import { nearbyOptions, SecureSystem } from "../types/connect";
@@ -149,7 +150,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
 
       let filePath: string;
       if (!this.secure.enable) {
-        filePath = path.join(this.dataPath, `${dataname}.json`);
+        filePath = path.join(this.dataPath, `${dataname}.yaml`);
       } else {
         filePath = path.join(this.dataPath, `${dataname}.verse`);
       }
@@ -238,14 +239,13 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
       };
     }
   }
-
   async add(
     dataname: string,
     newData: any,
     options: AdapterUniqueKey = {}
   ): Promise<AdapterResults> {
     try {
-      const loaded: any = (await this.load(dataname)) || [];
+      const loaded: any = await this.load(dataname);
       let currentData: any = loaded.results;
 
       if (typeof currentData === "undefined") {
@@ -277,7 +277,23 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
         : [newData];
       const insertedIds: string[] = [];
 
-      flattenedNewData.forEach((item: any) => {
+      for (const item of flattenedNewData) {
+        if (options.uniqueKeys) {
+          for (const key of options.uniqueKeys) {
+            if (
+              currentData.some(
+                (existingItem: any) => existingItem[key] === item[key]
+              )
+            ) {
+              return {
+                acknowledged: false,
+                errorMessage: `Duplicate value found for unique key: ${key}`,
+                results: null,
+              };
+            }
+          }
+        }
+
         const insertedId = randomUUID();
         item._id = insertedId;
         if (options.uniqueKeys) {
@@ -288,9 +304,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
         }
         currentData.push(item);
         insertedIds.push(insertedId);
-      });
-
-      let data;
+      }
 
       if (this.secure.enable) {
         const encodedData = await encodeYAML(
@@ -313,7 +327,10 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
       return {
         acknowledged: true,
         message: "Data added successfully.",
-        results: insertedIds,
+        results: {
+          insertedIds,
+          data: currentData,
+        },
       };
     } catch (e: any) {
       logError({
@@ -332,7 +349,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
 
   private async index(dataname: string): Promise<void> {
     if (!this.indexes.has(dataname)) {
-      const loaded: any = (await this.load(dataname)) || [];
+      const loaded: any = await this.load(dataname);
       let currentData: any = loaded.results;
       const indexMap = new Map<string, number[]>();
       currentData.forEach((item: any, index: any) => {
@@ -361,11 +378,39 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
   }
 
   private matchesQuery(item: any, query: any): boolean {
+    if (query.$and && Array.isArray(query.$and)) {
+      return query.$and.every((condition: any) =>
+        this.matchesQuery(item, condition)
+      );
+    }
+
+    if (query.$or && Array.isArray(query.$or) && query.$or.length > 0) {
+      return query.$or.some((condition: any) =>
+        this.matchesQuery(item, condition)
+      );
+    }
+
     for (const key of Object.keys(query)) {
       const queryValue = query[key];
       let itemValue = this.getValueByPath(item, key);
 
-      if (typeof queryValue === "object") {
+      if (key === "$and" && Array.isArray(queryValue)) {
+        if (!this.matchesQuery(item, { $and: queryValue })) {
+          return false;
+        }
+      } else if (
+        key === "$or" &&
+        Array.isArray(queryValue) &&
+        queryValue.length > 0
+      ) {
+        if (
+          !queryValue.some((condition: any) =>
+            this.matchesQuery(item, condition)
+          )
+        ) {
+          return false;
+        }
+      } else if (typeof queryValue === "object") {
         if (queryValue.$regex && typeof itemValue === "string") {
           const regex = new RegExp(queryValue.$regex);
           if (!regex.test(itemValue)) {
@@ -408,6 +453,10 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
           }
         } else if (queryValue.$not && typeof queryValue.$not === "object") {
           if (this.matchesQuery(item, { [key]: queryValue.$not })) {
+            return false;
+          }
+        } else if (queryValue.$ne !== undefined) {
+          if (itemValue === queryValue.$ne) {
             return false;
           }
         } else if (queryValue.$elemMatch && Array.isArray(itemValue)) {
@@ -457,27 +506,11 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
             default:
               return false;
           }
-        } else if (queryValue.$and && Array.isArray(queryValue.$and)) {
-          if (
-            !queryValue.$and.every((condition: any) =>
-              this.matchesQuery(item, condition)
-            )
-          ) {
-            return false;
-          }
         } else if (
           queryValue.$validate &&
           typeof queryValue.$validate === "function"
         ) {
           if (!queryValue.$validate(itemValue)) {
-            return false;
-          }
-        } else if (queryValue.$or && Array.isArray(queryValue.$or)) {
-          if (
-            !queryValue.$or.some((condition: any) =>
-              this.matchesQuery(item, condition)
-            )
-          ) {
             return false;
           }
         } else if (queryValue.$size !== undefined && Array.isArray(itemValue)) {
@@ -885,9 +918,9 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
       let data: any;
 
       if (this.secure.enable) {
-        data = await decodeYAML(dataname, this.secure.secret);
+        data = await encodeYAML(currentData, this.secure.secret);
       } else {
-        data = yaml.stringify(currentData);
+        data = yaml.stringify(currentData, null, 2);
       }
 
       fs.writeFileSync(dataname, data);
@@ -920,7 +953,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
   async update(
     dataname: string,
     searchQuery: any,
-    updateQuery: any,
+    updateQuery: operationKeys,
     upsert?: boolean,
     loadedData?: any[]
   ): Promise<AdapterResults> {
@@ -1219,69 +1252,6 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
     }
   }
 
-  async search(collectionFilters: CollectionFilter[]): Promise<AdapterResults> {
-    try {
-      const results: SearchResult = {};
-      for (const filter of collectionFilters) {
-        const { dataname, displayment, filter: query } = filter;
-
-        let filePath: string;
-
-        if (!this.dataPath) throw new Error("Please provide a datapath ");
-        if (this.secure.enable) {
-          filePath = path.join(this.dataPath, `${dataname}.verse`);
-        } else {
-          filePath = path.join(this.dataPath, `${dataname}.json`);
-        }
-
-        let jsonData: any;
-
-        if (this.secure.enable) {
-          jsonData = await decodeYAML(filePath, this.secure.secret);
-        } else {
-          const data = await fs.promises.readFile(filePath, "utf-8");
-          jsonData = yaml.stringify(data);
-        }
-
-        let result = jsonData || [];
-
-        if (!jsonData) {
-          jsonData = [];
-        }
-
-        if (Object.keys(query).length !== 0) {
-          result = jsonData.filter((item: any) => {
-            return this.matchesQuery(item, query);
-          });
-        }
-
-        if (displayment !== null) {
-          result = result.slice(0, displayment);
-        }
-
-        results[dataname] = result;
-      }
-
-      return {
-        acknowledged: true,
-        message: "Successfully searched in data for the given query.",
-        results: results,
-      };
-    } catch (e: any) {
-      logError({
-        content: e.message,
-        devLogs: this.devLogs,
-        throwErr: false,
-      });
-
-      return {
-        acknowledged: true,
-        errorMessage: `${e.message}`,
-        results: null,
-      };
-    }
-  }
-
   async drop(dataname: string): Promise<AdapterResults> {
     try {
       if (!fs.existsSync(dataname)) {
@@ -1319,6 +1289,57 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
     }
   }
 
+  async search(collectionFilters: CollectionFilter[]): Promise<AdapterResults> {
+    try {
+      const results: SearchResult = {};
+      for (const filter of collectionFilters) {
+        const { dataname, displayment, filter: query } = filter;
+
+        let filePath: string;
+
+        if (!this.dataPath) throw new Error("Please provide a datapath ");
+        if (this.secure.enable) {
+          filePath = path.join(this.dataPath, `${dataname}.verse`);
+        } else {
+          filePath = path.join(this.dataPath, `${dataname}.yaml`);
+        }
+
+        const yamlData = (await this.load(filePath)).results;
+        let result = yamlData;
+
+        if (Object.keys(query).length !== 0) {
+          result = yamlData.filter((item: any) => {
+            return this.matchesQuery(item, query);
+          });
+        }
+
+        if (displayment !== null) {
+          result = result.slice(0, displayment);
+        }
+
+        results[dataname] = result;
+      }
+
+      return {
+        acknowledged: true,
+        message: "Successfully searched in data for the given query.",
+        results: results,
+      };
+    } catch (e: any) {
+      logError({
+        content: e.message,
+        devLogs: this.devLogs,
+        throwErr: false,
+      });
+
+      return {
+        acknowledged: true,
+        errorMessage: `${e.message}`,
+        results: null,
+      };
+    }
+  }
+
   public async dataSize(dataname: string): Promise<AdapterResults> {
     try {
       const stats = fs.statSync(dataname);
@@ -1350,8 +1371,8 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
 
   public async countDoc(dataname: string): Promise<AdapterResults> {
     try {
-      const data: any = (await this.load(dataname)) || [];
-      const doc = data.results.length;
+      const data: any = await this.load(dataname);
+      const doc = data.results?.length;
 
       return {
         acknowledged: true,
@@ -1477,7 +1498,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
           });
           return {
             acknowledged: true,
-            message: `Invalid vector type: ${vector.type}`,
+            errorMessage: `Invalid vector type: ${vector.type}`,
             results: null,
           };
       }
@@ -1731,6 +1752,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
       };
     }
   }
+
   async batchTasks(
     tasks: Array<{
       type: string;
@@ -1745,6 +1767,10 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
       from?: any;
       to?: any;
       pipline?: any;
+      geometry?: any;
+      bufferDistance?: any;
+      polygonCoordinates?: any;
+      data?: nearbyOptions;
     }>
   ): Promise<AdapterResults> {
     const taskResults: Array<{ type: string; results: AdapterResults }> = [];
@@ -1757,7 +1783,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
     for (const task of tasks) {
       const dataName: string = path.join(
         this.dataPath,
-        `${task.dataname}.${this.secure.enable ? "verse" : "json"}`
+        `${task.dataname}.${this.secure.enable ? "verse" : "yaml"}`
       );
       try {
         let result: AdapterResults;
@@ -1797,7 +1823,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
             );
             break;
           case "loadAll":
-            result = await this.loadAll(dataName, task.query, task.updateQuery);
+            result = await this.loadAll(dataName, task.query, task.loadedData);
             break;
           case "search":
             result = await this.search(task.collectionFilters);
@@ -1814,8 +1840,17 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
           case "countDoc":
             result = await this.countDoc(dataName);
             break;
-          case "countDoc":
+          case "aggregate":
             result = await this.aggregate(dataName, task.pipline);
+            break;
+          case "bufferZone":
+            result = await this.bufferZone(task.geometry, task.bufferDistance);
+            break;
+          case "polygonArea":
+            result = await this.calculatePolygonArea(task.polygonCoordinates);
+            break;
+          case "polygonArea":
+            result = await this.nearbyVectors(task.data);
             break;
           default:
             throw new Error(`Unknown task type: ${task.type}`);
@@ -2104,7 +2139,7 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
             fs.writeFileSync(from, "");
           } else {
             sourceData.results = [];
-            const sourceDataString = JSON.stringify(sourceData);
+            const sourceDataString = yaml.stringify(sourceData);
             fs.writeFileSync(from, sourceDataString);
           }
         }
