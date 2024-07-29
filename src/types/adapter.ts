@@ -113,9 +113,9 @@ export interface JsonYamlAdapter {
 export interface SessionAdapter {
   load(sessionId: string): Promise<AdapterResults | null>;
   add(sessionId: string, sessionData: SessionData): Promise<AdapterResults>;
-  destroy(sessionId: string): Promise<AdapterResults>;
+  drop(sessionId: string): Promise<AdapterResults>;
   clear(): Promise<AdapterResults>;
-  getStatistics(): Promise<AdapterResults>;
+  stats(): Promise<AdapterResults>;
   invalidate(
     predicate: (key: string, data: SessionData) => boolean
   ): Promise<AdapterResults>;
@@ -326,7 +326,7 @@ export interface CacheData {
 export interface CacheAdapter {
   load(key: string): Promise<AdapterResults | null>;
   add(key: string, data: CacheData): Promise<AdapterResults>;
-  destroy(key: string): Promise<AdapterResults>;
+  drop(key: string): Promise<AdapterResults>;
   stats(): Promise<AdapterResults>;
   clear(): Promise<AdapterResults>;
   invalidate(
