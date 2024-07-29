@@ -1,11 +1,9 @@
-import fs from "fs";
-import path from "path";
 import versedb from "../src/index";
 import { CacheAdapter, CacheData } from "../src/types/adapter";
 
 describe("CacheAdapter", () => {
-  const testDir = path.join(__dirname, "__test_cache__");
   const adapterOptions = {
+
     maxSize: 2,
     ttl: 10000,
     devLogs: { enable: false, path: "" },
@@ -13,17 +11,11 @@ describe("CacheAdapter", () => {
   let cacheAdapter: CacheAdapter;
 
   beforeAll(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmdirSync(testDir, { recursive: true });
-    }
-    fs.mkdirSync(testDir, { recursive: true });
     cacheAdapter = new versedb.cache(adapterOptions);
   });
 
   afterAll(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmdirSync(testDir, { recursive: true });
-    }
+    cacheAdapter.clear()
   });
 
   test("should add a cache entry", async () => {
