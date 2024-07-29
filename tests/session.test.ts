@@ -27,7 +27,7 @@ describe("SessionAdapter", () => {
     }
   });
 
-  test("should add a session", async () => {
+  test("add a session", async () => {
     const sessionId = "test-session";
     const sessionData: SessionData = {
       key: "value",
@@ -43,7 +43,7 @@ describe("SessionAdapter", () => {
     expect(loadedSession?.session).toEqual(sessionData);
   });
 
-  test("should load a session", async () => {
+  test("load a session", async () => {
     const sessionId = "test-session-2";
     const sessionData: SessionData = {
       key: "value",
@@ -57,7 +57,7 @@ describe("SessionAdapter", () => {
     expect(result?.session).toEqual(sessionData);
   });
 
-  test("should destroy a session", async () => {
+  test("destroy a session", async () => {
     const sessionId = "test-session-3";
     const sessionData: SessionData = {
       key: "value",
@@ -73,7 +73,7 @@ describe("SessionAdapter", () => {
     expect(loadResult).toBeNull();
   });
 
-  test("should clear all sessions", async () => {
+  test("clear all sessions", async () => {
     const sessionId1 = "test-session-4";
     const sessionId2 = "test-session-5";
     const sessionData: SessionData = {
@@ -94,7 +94,7 @@ describe("SessionAdapter", () => {
     expect(loadResult2).toBeNull();
   });
 
-  test("should invalidate sessions based on predicate", async () => {
+  test("invalidate sessions based on predicate", async () => {
     const sessionId1 = "test-session-6";
     const sessionId2 = "test-session-7";
     const sessionData: SessionData = {
@@ -117,7 +117,7 @@ describe("SessionAdapter", () => {
     expect(loadResult2).toBeNull();
   });
 
-  test("should regenerate session ID", async () => {
+  test("regenerate session ID", async () => {
     const oldSessionId = "test-session-8";
     const newSessionId = "test-session-9";
     const sessionData: SessionData = {

@@ -18,7 +18,7 @@ describe("CacheAdapter", () => {
     cacheAdapter.clear()
   });
 
-  test("should add a cache entry", async () => {
+  test("add a cache entry", async () => {
     const key = "test-key";
     const data: CacheData = { some: "data" };
 
@@ -31,7 +31,7 @@ describe("CacheAdapter", () => {
     expect(loadedEntry?.results).toEqual(data);
   });
 
-  test("should load a cache entry", async () => {
+  test("load a cache entry", async () => {
     const key = "test-key-2";
     const data: CacheData = { some: "data" };
 
@@ -42,7 +42,7 @@ describe("CacheAdapter", () => {
     expect(result?.results).toEqual(data);
   });
 
-  test("should handle cache expiration", async () => {
+  test("handle cache expiration", async () => {
     const key = "test-key-expired";
     const data: CacheData = { some: "data" };
 
@@ -56,7 +56,7 @@ describe("CacheAdapter", () => {
     expect(result).toBeNull();
   });
 
-  test("should destroy a cache entry", async () => {
+  test("destroy a cache entry", async () => {
     const key = "test-key-3";
     const data: CacheData = { some: "data" };
 
@@ -69,7 +69,7 @@ describe("CacheAdapter", () => {
     expect(loadResult).toBeNull();
   });
 
-  test("should clear all cache entries", async () => {
+  test("clear all cache entries", async () => {
     const key1 = "test-key-4";
     const key2 = "test-key-5";
     const data: CacheData = { some: "data" };
@@ -87,7 +87,7 @@ describe("CacheAdapter", () => {
     expect(loadResult2).toBeNull();
   });
 
-  test("should invalidate cache entries based on predicate", async () => {
+  test("invalidate cache entries based on predicate", async () => {
     const key1 = "test-key-6";
     const key2 = "test-key-7";
     const data: CacheData = { some: "data" };
@@ -107,7 +107,7 @@ describe("CacheAdapter", () => {
     expect(loadResult2).toBeNull();
   });
 
-  test("should handle devLogs error", () => {
+  test("handle devLogs error", () => {
     jest.spyOn(console, "error").mockImplementation(() => {}); // Mock console.error
 
     expect(() => {
