@@ -4,8 +4,11 @@
 
 We are currently supporting the following versions of the `verse.db` package:
 
-- 1.0 ... 1.1
-- 1.1 (now)
+- 1.0.x ... 1.0.4
+- 1.1.x ... 1.1.6
+- 2.0.x ... 2.0.8
+- 2.1.x ... 2.1.16
+- 2.2.x (now)
 
 ## Reporting a Vulnerability
 
