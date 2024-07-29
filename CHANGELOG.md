@@ -2,14 +2,32 @@
 
 ### Change log:
 
-## v2.3 [Beta]
+## v2.2-beta.1 [Beta]
 
-- Added new adapter "Session" Adapter
-- Added new adapter "Cache" Adapter
-- Added redis for more advanced adapter for "Session" adapter
-- New SQL Adapter
+### Added
+- Add Session & Cache adapter to the connect class
+- Add Tests for Cache Adapter
+- Add tests for Session adapter 
 
-## Version v2.2
+### Fixed
+- Fixed Drop method bug not returning anything
+- Fixed some bugs in YAML adapter 
+
+### Removed
+- Remove redis
+
+### New
+- NEW SQL adapter
+- New "cache" & "session" adapter
+- New "session" adapter
+- New "cache" adapter 
+
+### Updated
+- Update the function names 
+- Update the Tests 
+- update SECURITY.md
+
+## Version v2.1.16
 
 - Fixed batchTasks in json/yaml.
 - Fixed types.
