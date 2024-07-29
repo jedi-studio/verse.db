@@ -8,7 +8,6 @@ describe("SessionAdapter", () => {
     dataPath: testDir,
     maxSize: 10,
     ttl: 10000, // 10 seconds TTL
-    secure: { enable: false, secret: "" },
     devLogs: { enable: false, path: "" },
   };
   let adapter: SessionAdapter;
@@ -18,7 +17,10 @@ describe("SessionAdapter", () => {
       fs.promises.rmdir(testDir, { recursive: true });
     }
     fs.promises.mkdir(testDir, { recursive: true });
-    adapter = new versedb.session(adapterOptions);
+    adapter = new versedb.session(adapterOptions, {
+      enable: false,
+      secret: "",
+    });
   });
 
   afterAll(() => {
@@ -57,7 +59,7 @@ describe("SessionAdapter", () => {
     expect(result?.session).toEqual(sessionData);
   });
 
-  test("destroy a session", async () => {
+  test("drop a session", async () => {
     const sessionId = "test-session-3";
     const sessionData: SessionData = {
       key: "value",
@@ -65,9 +67,9 @@ describe("SessionAdapter", () => {
     };
 
     await adapter.add(sessionId, sessionData);
-    const destroyResult = await adapter.destroy(sessionId);
-    expect(destroyResult.acknowledged).toBe(true);
-    expect(destroyResult.message).toBe(`Session ${sessionId} destroyed`);
+    const dropResult = await adapter.drop(sessionId);
+    expect(dropResult.acknowledged).toBe(true);
+    expect(dropResult.message).toBe(`Session ${sessionId} droped`);
 
     const loadResult = await adapter.load(sessionId);
     expect(loadResult).toBeNull();

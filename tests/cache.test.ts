@@ -56,14 +56,14 @@ describe("CacheAdapter", () => {
     expect(result).toBeNull();
   });
 
-  test("destroy a cache entry", async () => {
+  test("drop a cache entry", async () => {
     const key = "test-key-3";
     const data: CacheData = { some: "data" };
 
     await cacheAdapter.add(key, data);
-    const destroyResult = await cacheAdapter.destroy(key);
-    expect(destroyResult.acknowledged).toBe(true);
-    expect(destroyResult.message).toBe(`Cache entry ${key} destroyed`);
+    const dropResult = await cacheAdapter.drop(key);
+    expect(dropResult.acknowledged).toBe(true);
+    expect(dropResult.message).toBe(`Cache entry ${key} droped`);
 
     const loadResult = await cacheAdapter.load(key);
     expect(loadResult).toBeNull();
