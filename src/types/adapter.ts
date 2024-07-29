@@ -328,6 +328,7 @@ export interface CacheAdapter {
   add(key: string, data: CacheData): Promise<AdapterResults>;
   destroy(key: string): Promise<AdapterResults>;
   stats(): Promise<AdapterResults>;
+  clear(): Promise<AdapterResults>;
   invalidate(
     predicate: (key: string, data: CacheData) => boolean
   ): Promise<AdapterResults>;
