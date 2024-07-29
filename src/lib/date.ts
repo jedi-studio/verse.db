@@ -1,5 +1,5 @@
 /**
- * 
+ *
  * @param date the Data() to be formated
  * @returns formated data
  */
@@ -14,12 +14,12 @@ export function formatDateTime(date: Date) {
 }
 
 /**
- * 
+ *
  * @param currentDate get the current data of now
  * @param currentDataString get the current data and remove the / from the format
  */
 export const currentDate: string = formatDateTime(new Date());
-export const currentDateString: string = currentDate.replace(/\D/g, ""); 
+export const currentDateString: string = currentDate.replace(/\D/g, "");
 
 /**
  * @returns Local Data Formate "2024/5/31, 1:44:7 AM"
@@ -27,15 +27,15 @@ export const currentDateString: string = currentDate.replace(/\D/g, "");
 function getLocalFormattedDate() {
   const now = new Date();
   const options: any = {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: true
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: true,
   };
-  return now.toLocaleString('en-US', options);
+  return now.toLocaleString("en-US", options);
 }
 
 /**

@@ -1,3 +1,6 @@
+import { FindQuery, SchemaDefinition } from "./sql-types";
+import { SQLSchema } from "../core/functions/SQL-Schemas";
+
 export interface DisplayOptions {
   filters?: Record<string, any>;
   sortOrder?: "asc" | "desc";
@@ -16,19 +19,20 @@ export interface queryOptions {
   sortField?: any;
   distinct?: number;
   dateRange?: any;
-  limitFields?: any
+  limitFields?: any;
   page?: number;
   pageSize?: number;
   displayment?: number | null | undefined | any;
   groupBy?: any;
+  split?: number;
 }
 
 export interface AdapterUniqueKey {
   uniqueKeys?: string[];
-};
+}
 
-export interface AdapterOptions {
-  uniqueKeys?: AdapterUniqueKey[];
+export interface SessionData {
+  [key: string]: any;
 }
 
 export interface AdapterResults {
@@ -37,7 +41,9 @@ export interface AdapterResults {
   errorMessage?: string;
   results?: any;
   error?: Error;
+  sqlContent?: string | null;
   currentData?: any[];
+  session?: SessionData;
 }
 
 export interface MigrationParams {
@@ -48,46 +54,160 @@ export interface MigrationParams {
 
 export interface JsonYamlAdapter {
   load(dataname: string): Promise<AdapterResults>;
-  add(dataname: string, newData: any, options?: AdapterUniqueKey): Promise<AdapterResults>;
-  find(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<AdapterResults>;
-  loadAll(dataname: string, displayOptions: queryOptions, loadedData?: any[]): Promise<AdapterResults>;
-  remove(dataname: string, query: any, options?: any, loadedData?: any[]): Promise<AdapterResults>;
-  update(dataname: string, queries: any, newData: any, upsert: boolean, loadedData?: any[]): Promise<AdapterResults>;
-  updateMany(dataname: any, queries: any[any], newData: operationKeys, loadedData?: any[]): Promise<AdapterResults>;
+  findCollection(dataname: string): Promise<AdapterResults>;
+  updateCollection(
+    dataname: string,
+    newDataName: string
+  ): Promise<AdapterResults>;
+  add(
+    dataname: string,
+    newData: any,
+    options?: AdapterUniqueKey
+  ): Promise<AdapterResults>;
+  find(
+    dataname: string,
+    query: any,
+    options?: any,
+    loadedData?: any[]
+  ): Promise<AdapterResults>;
+  loadAll(
+    dataname: string,
+    displayOptions: queryOptions,
+    loadedData?: any[]
+  ): Promise<AdapterResults>;
+  remove(
+    dataname: string,
+    query: any,
+    options?: any,
+    loadedData?: any[]
+  ): Promise<AdapterResults>;
+  update(
+    dataname: string,
+    queries: any,
+    newData: any,
+    upsert: boolean,
+    loadedData?: any[]
+  ): Promise<AdapterResults>;
+  updateMany(
+    dataname: any,
+    queries: any[any],
+    newData: operationKeys,
+    loadedData?: any[]
+  ): Promise<AdapterResults>;
   drop(dataname: string): Promise<AdapterResults>;
   search(collectionFilters: CollectionFilter[]): Promise<AdapterResults>;
   dataSize(dataname: string): Promise<AdapterResults>;
   countDoc(dataname: string): Promise<AdapterResults>;
-  nearbyVectors(data: nearbyOptions): Promise<AdapterResults>
+  nearbyVectors(data: nearbyOptions): Promise<AdapterResults>;
   calculatePolygonArea(polygonCoordinates: any): Promise<AdapterResults>;
   bufferZone(geometry: any, bufferDistance: any): Promise<AdapterResults>;
   batchTasks(operations: any[]): Promise<AdapterResults>;
   aggregate(dataname: string, pipeline: any[]): Promise<AdapterResults>;
-  moveData(from: string, to: string, options: { query?: queryOptions, dropSource?: boolean }): Promise<AdapterResults>;
+  moveData(
+    from: string,
+    to: string,
+    options: { query?: queryOptions; dropSource?: boolean }
+  ): Promise<AdapterResults>;
+}
+
+export interface SessionAdapter {
+  load(sessionId: string): Promise<AdapterResults | null>;
+  add(sessionId: string, sessionData: SessionData): Promise<AdapterResults>;
+  destroy(sessionId: string): Promise<AdapterResults>;
+  clear(): Promise<AdapterResults>;
+  getStatistics(): Promise<AdapterResults>;
+  invalidate(
+    predicate: (key: string, data: SessionData) => boolean
+  ): Promise<AdapterResults>;
+  regenerateSessionId(
+    oldSessionId: string,
+    newSessionId: string
+  ): Promise<AdapterResults>;
+  expressMiddleware(): Function;
+  nextMiddleware(): Function;
 }
 
 export interface SQLAdapter {
-  load(dataname: string): Promise<AdapterResults>;
-  createTable(dataname: string, tableName: string, tableDefinition?: string): Promise<AdapterResults>;
-  insertData(dataname: string, tableName: string, data: any[]): Promise<AdapterResults>;
-  find(dataname: string, tableName: string, condition?: string): Promise<AdapterResults>;
-  removeData(dataname: string, tableName: string, dataToRemove: any[]): Promise<AdapterResults>;
-  removeKey(dataname: string, tableName: string, keyToRemove: string, valueToRemove: string): Promise<AdapterResults>;
-  update(dataname: string, tableName: string, query: string, newData: any, upsert: boolean): Promise<AdapterResults>;
-  allData(dataname: string, displayOption: DisplayOptions): Promise<AdapterResults>;
-  updateMany(dataname: string, tableName: string, queries: any[], newData: operationKeys): Promise<AdapterResults>;
-  drop(dataname: string, tableName?: string): Promise<AdapterResults>
-  countDoc(dataname: string, tableName: string): Promise<AdapterResults>;
-  countTable(dataname: string): Promise<AdapterResults>;
-  dataSize(dataname: string): Promise<AdapterResults>;
-  migrateTable({ from, to, table }: MigrationParams): Promise<AdapterResults>;
-  toJSON(from: string): Promise<AdapterResults>;
-  search(dataname: string, searchOptions: { table: string; query: string }[], displayOptions?: searchFilters): Promise<AdapterResults>
+  loadData(dataname: string, schema: SQLSchema): Promise<AdapterResults>;
+  findCollection(dataname: string): Promise<AdapterResults>;
+  updateCollection(
+    dataname: string,
+    newDataName: string
+  ): Promise<AdapterResults>;
+  createTable(dataname: string, schema: SQLSchema): Promise<AdapterResults>;
+  insertData(
+    filename: string,
+    { schema, dataArray }: { schema: SQLSchema; dataArray: any[] }
+  ): Promise<AdapterResults>;
+  selectData(
+    filePath: string,
+    { query, schema, loadedData }: FindQuery,
+    options: any
+  ): Promise<AdapterResults>;
+  selectAll(
+    dataname: string,
+    { query, schema, loadedData }: FindQuery
+  ): Promise<AdapterResults>;
+  removeData(
+    filePath: string,
+    {
+      query,
+      schema,
+      docCount,
+      loadedData,
+    }: { query: any; schema: SQLSchema; docCount?: number; loadedData?: any[] }
+  ): Promise<AdapterResults>;
+  updateData(
+    filePath: string,
+    {
+      query,
+      schema,
+      loadedData,
+    }: { query: any; schema: SQLSchema; loadedData?: any[] | null },
+    { updateQuery, upsert }: { updateQuery: operationKeys; upsert?: boolean }
+  ): Promise<AdapterResults>;
+  batchUpdate(
+    filePath: string,
+    {
+      query,
+      schema,
+      loadedData,
+    }: { query: any; schema: SQLSchema; loadedData?: any[] | null },
+    { updateQuery }: { updateQuery: operationKeys }
+  ): Promise<AdapterResults>;
+  countTables(dataname: string): Promise<AdapterResults>;
+  docsCount(dataname: string, schema: SQLSchema): Promise<AdapterResults>;
+  drop(dataname: string, schema: SQLSchema): Promise<AdapterResults>;
+  join(collectionFilters: JoinSQL[]): Promise<AdapterResults>;
+  dataSize(dataname: string, schema: SQLSchema): Promise<AdapterResults>;
+  batchTasks(tasks: any): Promise<AdapterResults>;
+  tableNames(filePath: string): AdapterResults;
+  aggregateData(
+    dataname: string,
+    schema: SQLSchema,
+    pipeline: any[]
+  ): Promise<AdapterResults>;
+  toJSON(
+    filePath: string,
+    schema: SQLSchema,
+    tableName?: string
+  ): Promise<AdapterResults>;
 }
 
 export interface DevLogsOptions {
   enable: boolean;
   path: string;
+}
+
+export interface MigrationPath {
+  from: string;
+  to: string;
+}
+
+export interface TableOptions {
+  fromTable: string;
+  toTable: string;
+  query?: any;
 }
 
 export interface AdapterSetting {
@@ -97,6 +217,14 @@ export interface AdapterSetting {
 
 export interface CollectionFilter {
   dataname: string;
+  displayment: number | null;
+  filter?: any;
+}
+
+export interface JoinSQL {
+  dataname: string;
+  tableName: string;
+  schema: SQLSchema;
   displayment: number | null;
   filter?: any;
 }
@@ -117,18 +245,17 @@ export interface operationKeys {
   $mul?: { [key: string]: number };
   $inc?: { [key: string]: number };
   $bit?: { [key: string]: any };
-  $currentDate?: { [key: string]: boolean | { $type: 'date' | 'timestamp' }};
+  $currentDate?: { [key: string]: boolean | { $type: "date" | "timestamp" } };
   $pop?: { [key: string]: number };
   $slice?: { [key: string]: [number, number] | number };
   $sort?: { [key: string]: 1 | -1 };
 }
 
-
 export interface nearbyOptions {
   dataName: string;
   point: {
-      latitude: number;
-      longitude: number;
+    latitude: number;
+    longitude: number;
   };
   radius: number;
   visitedVectors?: Set<any>;
@@ -138,7 +265,7 @@ export interface searchFilters {
   groupBy?: { column: string };
   page?: number;
   pageSize?: number;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
   displayment?: number | null;
 }
 
@@ -157,7 +284,16 @@ export interface queries<T> {
   $not?: queries<T>;
   $in?: T[];
   $elemMatch?: queries<T>;
-  $typeOf?: string | 'string' | 'number' | 'boolean' | 'undefined' | 'array' | 'object' | 'null' | 'any';
+  $typeOf?:
+    | string
+    | "string"
+    | "number"
+    | "boolean"
+    | "undefined"
+    | "array"
+    | "object"
+    | "null"
+    | "any";
   $regex?: string;
   $size?: number;
 }
@@ -170,4 +306,29 @@ export interface QueryOptions {
   $skip?: number;
   $limit?: number;
   $project?: { [key: string]: boolean };
+}
+
+export interface groupExp {
+  $sum?: string;
+  $avg?: string;
+  $min?: string;
+  $max?: string;
+  $first?: string;
+  $last?: string;
+  $addToSet?: string;
+  $push?: string;
+}
+
+export interface CacheData {
+  [key: string]: any;
+}
+
+export interface CacheAdapter {
+  load(key: string): Promise<AdapterResults | null>;
+  add(key: string, data: CacheData): Promise<AdapterResults>;
+  destroy(key: string): Promise<AdapterResults>;
+  stats(): Promise<AdapterResults>;
+  invalidate(
+    predicate: (key: string, data: CacheData) => boolean
+  ): Promise<AdapterResults>;
 }

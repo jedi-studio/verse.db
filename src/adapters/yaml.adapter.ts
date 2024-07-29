@@ -11,16 +11,30 @@ import {
   SearchResult,
   queryOptions,
   JsonYamlAdapter,
+  groupExp,
 } from "../types/adapter";
 import { DevLogsOptions, AdapterSetting } from "../types/adapter";
 import { decodeYAML, encodeYAML } from "../core/functions/secureData";
 import { nearbyOptions, SecureSystem } from "../types/connect";
-import { opSet, opInc, opPush, opUnset, opPull, opRename, opAddToSet, opMin, opMax, opMul, opBit, opCurrentDate, opPop, opSlice, opSort } from "../core/functions/operations";
-type AggregationExpression = {
-  $sum?: string;
-  $avg?: string;
-  // Add other aggregation operators as needed
-};
+import {
+  opSet,
+  opInc,
+  opPush,
+  opUnset,
+  opPull,
+  opRename,
+  opAddToSet,
+  opMin,
+  opMax,
+  opMul,
+  opBit,
+  opCurrentDate,
+  opPop,
+  opSlice,
+  opSort,
+  isEqual,
+} from "../core/functions/operations";
+
 export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
   public devLogs: DevLogsOptions = { enable: false, path: "" };
   public secure: SecureSystem = { enable: false, secret: "" };
@@ -126,6 +140,105 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
     }
   }
 
+  async findCollection(
+    dataname: string,
+    check: "startsWith" | "endsWith" | "normal" = "normal"
+  ): Promise<AdapterResults> {
+    try {
+      if (!this.dataPath) throw new Error("dataPath not defined");
+
+      let filePath: string;
+      if (!this.secure.enable) {
+        filePath = path.join(this.dataPath, `${dataname}.json`);
+      } else {
+        filePath = path.join(this.dataPath, `${dataname}.verse`);
+      }
+
+      const dirPath = path.dirname(filePath);
+      if (!fs.existsSync(dirPath)) {
+        return {
+          acknowledged: false,
+          errorMessage: `Directory doesn't exist.`,
+          results: null,
+        };
+      }
+
+      let files: string[] = fs.readdirSync(dirPath);
+      let matchedFiles: string[] = [];
+
+      if (check === "startsWith") {
+        matchedFiles = files
+          .filter((file) => file.startsWith(dataname))
+          .map((file) => path.join(dirPath, file));
+      } else if (check === "endsWith") {
+        matchedFiles = files
+          .filter((file) => file.endsWith(dataname))
+          .map((file) => path.join(dirPath, file));
+      } else if (fs.existsSync(filePath)) {
+        matchedFiles.push(filePath);
+      }
+
+      if (matchedFiles.length > 0) {
+        return {
+          acknowledged: true,
+          message: `Files found.`,
+          results: matchedFiles,
+        };
+      } else {
+        return {
+          acknowledged: false,
+          errorMessage: `No matching files found.`,
+          results: null,
+        };
+      }
+    } catch (e: any) {
+      return {
+        acknowledged: false,
+        errorMessage: `${e.message}.`,
+        results: null,
+      };
+    }
+  }
+
+  async updateCollection(
+    dataname: string,
+    newDataname: string
+  ): Promise<AdapterResults> {
+    try {
+      const result = await this.findCollection(dataname, "normal");
+
+      if (
+        result.acknowledged &&
+        result.results &&
+        Array.isArray(result.results) &&
+        result.results.length > 0
+      ) {
+        const oldFilePath = result.results[0];
+        const newFilePath = oldFilePath.replace(dataname, newDataname);
+
+        fs.renameSync(oldFilePath, newFilePath);
+
+        return {
+          acknowledged: true,
+          message: `File renamed successfully from ${dataname} to ${newDataname}.`,
+          results: newFilePath,
+        };
+      } else {
+        return {
+          acknowledged: false,
+          errorMessage: `File with the name ${dataname} does not exist.`,
+          results: null,
+        };
+      }
+    } catch (e: any) {
+      return {
+        acknowledged: false,
+        errorMessage: `${e.message}.`,
+        results: null,
+      };
+    }
+  }
+
   async add(
     dataname: string,
     newData: any,
@@ -180,7 +293,10 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
       let data;
 
       if (this.secure.enable) {
-        const encodedData = await encodeYAML(flattenedNewData, this.secure.secret);
+        const encodedData = await encodeYAML(
+          flattenedNewData,
+          this.secure.secret
+        );
         fs.appendFileSync(dataname, encodedData);
       } else {
         const data = yaml.stringify(currentData, null, 2);
@@ -216,236 +332,282 @@ export class yamlAdapter extends EventEmitter implements JsonYamlAdapter {
 
   private async index(dataname: string): Promise<void> {
     if (!this.indexes.has(dataname)) {
-        const loaded: any = (await this.load(dataname)) || [];
-        let currentData: any = loaded.results;
-        const indexMap = new Map<string, number[]>();
-        currentData.forEach((item: any, index: any) => {
-            Object.keys(item).forEach((key) => {
-                const value = item[key];
-                if (!indexMap.has(key)) {
-                    indexMap.set(key, []);
-                }
-                indexMap.get(key)?.push(index);
-            });
+      const loaded: any = (await this.load(dataname)) || [];
+      let currentData: any = loaded.results;
+      const indexMap = new Map<string, number[]>();
+      currentData.forEach((item: any, index: any) => {
+        Object.keys(item).forEach((key) => {
+          const value = item[key];
+          if (!indexMap.has(key)) {
+            indexMap.set(key, []);
+          }
+          indexMap.get(key)?.push(index);
         });
-        this.indexes.set(dataname, indexMap);
+      });
+      this.indexes.set(dataname, indexMap);
     }
   }
 
   private getValueByPath(obj: any, path: string): any {
-    return path.split('.').reduce((acc, part) => {
-        const match = part.match(/(\w+)\[(\d+)\]/);
-        if (match) {
-            const [, key, index] = match;
-            return acc?.[key]?.[index];
-        } else {
-            return acc?.[part];
-        }
+    return path.split(".").reduce((acc, part) => {
+      const match = part.match(/(\w+)\[(\d+)\]/);
+      if (match) {
+        const [, key, index] = match;
+        return acc?.[key]?.[index];
+      } else {
+        return acc?.[part];
+      }
     }, obj);
   }
 
   private matchesQuery(item: any, query: any): boolean {
     for (const key of Object.keys(query)) {
-        const queryValue = query[key];
-        let itemValue = this.getValueByPath(item, key);
+      const queryValue = query[key];
+      let itemValue = this.getValueByPath(item, key);
 
-        if (typeof queryValue === 'object') {
-            if (queryValue.$regex && typeof itemValue === 'string') {
-                const regex = new RegExp(queryValue.$regex);
-                if (!regex.test(itemValue)) {
-                    return false;
-                }
-            } else if (queryValue.$some) {
-                if (Array.isArray(itemValue)) {
-                    if (itemValue.length === 0) {
-                        return false;
-                    }
-                } else if (typeof itemValue === 'object' && itemValue !== null) {
-                    if (Object.keys(itemValue).length === 0) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            } else if (queryValue.$gt !== undefined && typeof itemValue === 'number') {
-                if (itemValue <= queryValue.$gt) {
-                    return false;
-                }
-            } else if (queryValue.$lt !== undefined && typeof itemValue === 'number') {
-                if (itemValue >= queryValue.$lt) {
-                    return false;
-                }
-            } else if (queryValue.$exists !== undefined) {
-                const exists = itemValue !== undefined;
-                if (exists !== queryValue.$exists) {
-                    return false;
-                }
-            } else if (queryValue.$in && Array.isArray(queryValue.$in)) {
-                if (!queryValue.$in.includes(itemValue)) {
-                    return false;
-                }
-            } else if (queryValue.$not && typeof queryValue.$not === 'object') {
-                if (this.matchesQuery(item, { [key]: queryValue.$not })) {
-                    return false;
-                }
-            } else if (queryValue.$elemMatch && Array.isArray(itemValue)) {
-                if (!itemValue.some((elem: any) => this.matchesQuery(elem, queryValue.$elemMatch))) {
-                    return false;
-                }
-            } else if (queryValue.$typeOf && typeof queryValue.$typeOf === 'string') {
-                const expectedType = queryValue.$typeOf.toLowerCase();
-                const actualType = typeof itemValue;
-                switch (expectedType) {
-                    case 'string':
-                    case 'number':
-                    case 'boolean':
-                    case 'undefined':
-                        if (expectedType !== actualType) {
-                            return false;
-                        }
-                        break;
-                    case 'array':
-                        if (!Array.isArray(itemValue)) {
-                            return false;
-                        }
-                        break;
-                    case 'object':
-                        if (!(itemValue !== null && typeof itemValue === 'object') && !Array.isArray(itemValue)) {
-                            return false;
-                        }
-                        break;
-                    case 'null':
-                        if (itemValue !== null) {
-                            return false;
-                        }
-                        break;
-                    case 'any':
-                        break;
-                    case 'custom':
-                    default:
-                        return false;
-                }
-            } else if (queryValue.$and && Array.isArray(queryValue.$and)) {
-                if (!queryValue.$and.every((condition: any) => this.matchesQuery(item, condition))) {
-                    return false;
-                }
-            } else if (queryValue.$validate && typeof queryValue.$validate === 'function') {
-                if (!queryValue.$validate(itemValue)) {
-                    return false;
-                }
-            } else if (queryValue.$or && Array.isArray(queryValue.$or)) {
-                if (!queryValue.$or.some((condition: any) => this.matchesQuery(item, condition))) {
-                    return false;
-                }
-            } else if (queryValue.$size !== undefined && Array.isArray(itemValue)) {
-                if (itemValue.length !== queryValue.$size) {
-                    return false;
-                }
-            } else if (queryValue.$nin !== undefined && Array.isArray(itemValue)) {
-                if (queryValue.$nin.some((val: any) => itemValue.includes(val))) {
-                    return false;
-                }
-            } else if (queryValue.$slice !== undefined && Array.isArray(itemValue)) {
-                const sliceValue = Array.isArray(queryValue.$slice) ? queryValue.$slice[0] : queryValue.$slice;
-                itemValue = itemValue.slice(sliceValue);
-            } else if (queryValue.$sort !== undefined && Array.isArray(itemValue)) {
-                const sortOrder = queryValue.$sort === 1 ? 1 : -1;
-                itemValue.sort((a: any, b: any) => sortOrder * (a - b));
-            } else if (queryValue.$text && typeof queryValue.$text === 'string' && typeof itemValue === 'string') {
-                const text = queryValue.$text.toLowerCase();
-                const target = itemValue.toLowerCase();
-                if (!target.includes(text)) {
-                    return false;
-                }
-            } else if (!this.matchesQuery(itemValue, queryValue)) {
-                return false;
+      if (typeof queryValue === "object") {
+        if (queryValue.$regex && typeof itemValue === "string") {
+          const regex = new RegExp(queryValue.$regex);
+          if (!regex.test(itemValue)) {
+            return false;
+          }
+        } else if (queryValue.$some) {
+          if (Array.isArray(itemValue)) {
+            if (itemValue.length === 0) {
+              return false;
             }
-        } else {
-            if (itemValue !== queryValue) {
-                return false;
+          } else if (typeof itemValue === "object" && itemValue !== null) {
+            if (Object.keys(itemValue).length === 0) {
+              return false;
             }
+          } else {
+            return false;
+          }
+        } else if (
+          queryValue.$gt !== undefined &&
+          typeof itemValue === "number"
+        ) {
+          if (itemValue <= queryValue.$gt) {
+            return false;
+          }
+        } else if (
+          queryValue.$lt !== undefined &&
+          typeof itemValue === "number"
+        ) {
+          if (itemValue >= queryValue.$lt) {
+            return false;
+          }
+        } else if (queryValue.$exists !== undefined) {
+          const exists = itemValue !== undefined;
+          if (exists !== queryValue.$exists) {
+            return false;
+          }
+        } else if (queryValue.$in && Array.isArray(queryValue.$in)) {
+          if (!queryValue.$in.includes(itemValue)) {
+            return false;
+          }
+        } else if (queryValue.$not && typeof queryValue.$not === "object") {
+          if (this.matchesQuery(item, { [key]: queryValue.$not })) {
+            return false;
+          }
+        } else if (queryValue.$elemMatch && Array.isArray(itemValue)) {
+          if (
+            !itemValue.some((elem: any) =>
+              this.matchesQuery(elem, queryValue.$elemMatch)
+            )
+          ) {
+            return false;
+          }
+        } else if (
+          queryValue.$typeOf &&
+          typeof queryValue.$typeOf === "string"
+        ) {
+          const expectedType = queryValue.$typeOf.toLowerCase();
+          const actualType = typeof itemValue;
+          switch (expectedType) {
+            case "string":
+            case "number":
+            case "boolean":
+            case "undefined":
+              if (expectedType !== actualType) {
+                return false;
+              }
+              break;
+            case "array":
+              if (!Array.isArray(itemValue)) {
+                return false;
+              }
+              break;
+            case "object":
+              if (
+                !(itemValue !== null && typeof itemValue === "object") &&
+                !Array.isArray(itemValue)
+              ) {
+                return false;
+              }
+              break;
+            case "null":
+              if (itemValue !== null) {
+                return false;
+              }
+              break;
+            case "any":
+              break;
+            case "custom":
+            default:
+              return false;
+          }
+        } else if (queryValue.$and && Array.isArray(queryValue.$and)) {
+          if (
+            !queryValue.$and.every((condition: any) =>
+              this.matchesQuery(item, condition)
+            )
+          ) {
+            return false;
+          }
+        } else if (
+          queryValue.$validate &&
+          typeof queryValue.$validate === "function"
+        ) {
+          if (!queryValue.$validate(itemValue)) {
+            return false;
+          }
+        } else if (queryValue.$or && Array.isArray(queryValue.$or)) {
+          if (
+            !queryValue.$or.some((condition: any) =>
+              this.matchesQuery(item, condition)
+            )
+          ) {
+            return false;
+          }
+        } else if (queryValue.$size !== undefined && Array.isArray(itemValue)) {
+          if (itemValue.length !== queryValue.$size) {
+            return false;
+          }
+        } else if (queryValue.$nin !== undefined && Array.isArray(itemValue)) {
+          if (queryValue.$nin.some((val: any) => itemValue.includes(val))) {
+            return false;
+          }
+        } else if (
+          queryValue.$slice !== undefined &&
+          Array.isArray(itemValue)
+        ) {
+          const sliceValue = Array.isArray(queryValue.$slice)
+            ? queryValue.$slice[0]
+            : queryValue.$slice;
+          itemValue = itemValue.slice(sliceValue);
+        } else if (queryValue.$sort !== undefined && Array.isArray(itemValue)) {
+          const sortOrder = queryValue.$sort === 1 ? 1 : -1;
+          itemValue.sort((a: any, b: any) => sortOrder * (a - b));
+        } else if (
+          queryValue.$text &&
+          typeof queryValue.$text === "string" &&
+          typeof itemValue === "string"
+        ) {
+          const text = queryValue.$text.toLowerCase();
+          const target = itemValue.toLowerCase();
+          if (!target.includes(text)) {
+            return false;
+          }
+        } else if (!this.matchesQuery(itemValue, queryValue)) {
+          return false;
         }
+      } else {
+        if (itemValue !== queryValue) {
+          return false;
+        }
+      }
     }
     return true;
-}
+  }
 
-async find(dataname: string, query: any, options: any = {}, loadedData?: any[]): Promise<any> {
-  try {
+  async find(
+    dataname: string,
+    query: any,
+    options: any = {},
+    loadedData?: any[]
+  ): Promise<any> {
+    try {
       if (!query) {
-          logError({
-              content: "Query isn't provided.",
-              devLogs: this.devLogs,
-              throwErr: true,
-          });
+        logError({
+          content: "Query isn't provided.",
+          devLogs: this.devLogs,
+          throwErr: false,
+        });
 
-          return {
-              acknowledged: false,
-              errorMessage: "Query isn't provided.",
-              results: null
-          };
+        return {
+          acknowledged: false,
+          errorMessage: "Query isn't provided.",
+          results: null,
+        };
       }
 
       await this.index(dataname);
       const indexMap = this.indexes.get(dataname);
 
       if (!indexMap) {
-          return {
-              acknowledged: true,
-              message: "No data found matching your query.",
-              results: null
-          };
+        return {
+          acknowledged: true,
+          message: "No data found matching your query.",
+          results: null,
+        };
       }
 
       let loaded: any = {};
       if (!loadedData) {
-          loaded = (await this.load(dataname)).results;
+        loaded = (await this.load(dataname)).results;
       } else {
-          loaded = loadedData;
+        loaded = loadedData;
       }
       let currentData: any[] = loaded;
 
-      const candidateIndex = currentData.findIndex((item: any) => this.matchesQuery(item, query));
+      const candidateIndex = currentData.findIndex((item: any) =>
+        this.matchesQuery(item, query)
+      );
 
       if (candidateIndex !== -1) {
-          let result = currentData[candidateIndex];
+        let result = currentData[candidateIndex];
 
-          if (options.$project) {
-              result = Object.keys(options.$project).reduce((projectedItem: any, field: string) => {
-                  if (options.$project[field]) {
-                      projectedItem[field] = this.getValueByPath(result, field);
-                  }
-                  return projectedItem;
-              }, {});
-          }
+        if (options.$project) {
+          result = Object.keys(options.$project).reduce(
+            (projectedItem: any, field: string) => {
+              if (options.$project[field]) {
+                projectedItem[field] = this.getValueByPath(result, field);
+              }
+              return projectedItem;
+            },
+            {}
+          );
+        }
 
-          return {
-              acknowledged: true,
-              message: "Found data matching your query.",
-              results: result
-          };
+        return {
+          acknowledged: true,
+          message: "Found data matching your query.",
+          results: result,
+        };
       } else {
-          return {
-              acknowledged: true,
-              message: "No data found matching your query.",
-              results: null
-          };
+        return {
+          acknowledged: true,
+          message: "No data found matching your query.",
+          results: null,
+        };
       }
-  } catch (e: any) {
+    } catch (e: any) {
       logError({
-          content: e.message,
-          devLogs: this.devLogs,
-          throwErr: true,
+        content: e.message,
+        devLogs: this.devLogs,
+        throwErr: false,
       });
 
       return {
-          acknowledged: false,
-          errorMessage: `${e.message}`,
-          results: null,
+        acknowledged: false,
+        errorMessage: `${e.message}`,
+        results: null,
       };
+    }
   }
-}
 
-async loadAll(
+  async loadAll(
     dataname: string,
     query: queryOptions,
     loadedData?: any[]
@@ -465,8 +627,9 @@ async loadAll(
         "page",
         "pageSize",
         "displayment",
+        "split",
       ];
-  
+
       const invalidOptions = Object.keys(query).filter(
         (key) => !validOptions.includes(key)
       );
@@ -477,7 +640,7 @@ async loadAll(
           throwErr: true,
         });
       }
-  
+
       let loaded: any = {};
       if (!loadedData) {
         loaded = (await this.load(dataname)).results;
@@ -486,9 +649,9 @@ async loadAll(
       }
 
       let currentData: any[] = loaded;
-  
+
       let filteredData = [...currentData];
-  
+
       if (query.searchText) {
         const searchText = query.searchText.toLowerCase();
         filteredData = filteredData.filter((item: any) =>
@@ -499,7 +662,7 @@ async loadAll(
           )
         );
       }
-  
+
       if (query.fields) {
         const selectedFields = query.fields
           .split(",")
@@ -514,11 +677,13 @@ async loadAll(
           return selectedDoc;
         });
       }
-  
+
       if (query.filter && Object.keys(query.filter).length > 0) {
-        filteredData = filteredData.filter((item: any) => this.matchesQuery(item, query.filter));
+        filteredData = filteredData.filter((item: any) =>
+          this.matchesQuery(item, query.filter)
+        );
       }
-  
+
       if (query.projection) {
         const projectionFields = Object.keys(query.projection);
         filteredData = filteredData.map((doc: any) => {
@@ -533,7 +698,7 @@ async loadAll(
           return projectedDoc;
         });
       }
-  
+
       if (
         query.sortOrder &&
         (query.sortOrder === "asc" || query.sortOrder === "desc")
@@ -546,7 +711,15 @@ async loadAll(
           }
         });
       }
-  
+
+      if (filteredData.length === 0) {
+        return {
+          acknowledged: true,
+          message: "No data matches the query.",
+          results: null,
+        };
+      }
+
       let groupedData: any = null;
       if (query.groupBy) {
         groupedData = {};
@@ -558,7 +731,7 @@ async loadAll(
           groupedData[key].push(item);
         });
       }
-  
+
       if (query.distinct) {
         const distinctField = query.distinct;
         const distinctValues = [
@@ -570,7 +743,7 @@ async loadAll(
           results: distinctValues,
         };
       }
-  
+
       if (query.dateRange) {
         const { startDate, endDate, dateField } = query.dateRange;
         filteredData = filteredData.filter((doc: any) => {
@@ -578,7 +751,7 @@ async loadAll(
           return docDate >= startDate && docDate <= endDate;
         });
       }
-  
+
       if (query.limitFields) {
         const limit = query.limitFields;
         filteredData = filteredData.map((doc: any) => {
@@ -591,7 +764,7 @@ async loadAll(
           return limitedDoc;
         });
       }
-  
+
       if (query.page && query.pageSize) {
         const startIndex = (query.page - 1) * query.pageSize;
         filteredData = filteredData.slice(
@@ -599,22 +772,45 @@ async loadAll(
           startIndex + query.pageSize
         );
       }
-  
+
       if (query.displayment !== null && query.displayment > 0) {
         filteredData = filteredData.slice(0, query.displayment);
       }
-  
+
       const results: any = { allData: filteredData };
-  
+
       if (query.groupBy) {
         results.groupedData = groupedData;
       }
-  
+
+      if (query.split && typeof query.split === "number" && query.split > 0) {
+        const splitCount = query.split;
+        const totalResults = filteredData.length;
+        if (splitCount <= totalResults) {
+          const chunkSize = Math.ceil(totalResults / splitCount);
+          const splitData = [];
+          for (let i = 0; i < totalResults; i += chunkSize) {
+            splitData.push(filteredData.slice(i, i + chunkSize));
+          }
+          return {
+            acknowledged: true,
+            message: `Data split into ${splitCount} datasets.`,
+            results: splitData,
+          };
+        } else {
+          return {
+            acknowledged: true,
+            message: `Split count (${splitCount}) is greater than total results (${totalResults}). Returning all data in one dataset.`,
+            results: [filteredData],
+          };
+        }
+      }
+
       this.emit("allData", results.allData);
-  
+
       return {
         acknowledged: true,
-        message: "Data found with the given options.",
+        message: "Data found with the given query options.",
         results: results,
       };
     } catch (e: any) {
@@ -648,79 +844,61 @@ async loadAll(
           results: null,
         };
       }
-  
+
       let loaded: any = {};
       if (!loadedData) {
         loaded = (await this.load(dataname)).results;
       } else {
         loaded = loadedData;
       }
-  
+
       let currentData: any[] = loaded;
-  
-      const dataFound = await this.find(dataname, query, currentData);
-      const foundDocument = dataFound.results;
-  
-      if (!foundDocument) {
+
+      const queryOptions = {
+        filter: query,
+        displayment: options?.docCount || 1,
+      };
+
+      const dataFound = await this.loadAll(dataname, queryOptions, currentData);
+      const foundDocuments = dataFound.results?.allData;
+
+      if (dataFound.results === null || foundDocuments.length === 0) {
         return {
           acknowledged: true,
           errorMessage: `No document found matching the query.`,
           results: null,
         };
       }
-  
+
       let removedCount = 0;
-      let matchFound = false;
-  
-      for (let i = 0; i < currentData.length; i++) {
-        const item = currentData[i];
-        let match = true;
-  
-        for (const key of Object.keys(query)) {
-          if (item[key] !== query[key]) {
-            match = false;
-            break;
-          }
-        }
-  
-        if (match) {
-          currentData.splice(i, 1);
+
+      foundDocuments.forEach((docToRemove: any) => {
+        const index = currentData.findIndex((doc: any) =>
+          isEqual(doc, docToRemove)
+        );
+        if (index !== -1) {
+          currentData.splice(index, 1);
           removedCount++;
-  
-          if (removedCount === options?.docCount) {
-            break;
-          }
-  
-          i--;
-          matchFound = true;
         }
-      }
-  
-      if (!matchFound) {
-        return {
-          acknowledged: true,
-          errorMessage: `No document found matching the query.`,
-          results: null,
-        };
-      }
-  
+      });
+
       let data: any;
-  
+
       if (this.secure.enable) {
-        data = await encodeYAML(currentData, this.secure.secret);
+        data = await decodeYAML(dataname, this.secure.secret);
       } else {
-        data = yaml.stringify(currentData, null, 2);
+        data = yaml.stringify(currentData);
       }
-  
+
       fs.writeFileSync(dataname, data);
-  
+
       logSuccess({
         content: "Data has been removed",
         devLogs: this.devLogs,
       });
-  
+
       this.emit("dataRemoved", query, options?.docCount);
-  
+
       return {
         acknowledged: true,
         message: `${removedCount} document(s) removed successfully.`,
@@ -737,7 +915,7 @@ async loadAll(
         results: null,
       };
     }
-  }  
+  }
 
   async update(
     dataname: string,
@@ -747,7 +925,6 @@ async loadAll(
     loadedData?: any[]
   ): Promise<AdapterResults> {
     try {
-
       if (!searchQuery) {
         return {
           acknowledged: false,
@@ -755,7 +932,7 @@ async loadAll(
           results: null,
         };
       }
-  
+
       if (!updateQuery) {
         return {
           acknowledged: false,
@@ -763,18 +940,18 @@ async loadAll(
           results: null,
         };
       }
-  
+
       let loaded: any = {};
       if (!loadedData) {
         loaded = (await this.load(dataname)).results;
       } else {
         loaded = loadedData;
       }
-  
+
       let currentData: any[] = loaded;
-      const dataFound = await this.find(dataname, searchQuery, currentData);
+      const dataFound = await this.find(dataname, searchQuery);
       let matchingDocument = dataFound.results;
-  
+
       if (!matchingDocument) {
         if (upsert) {
           matchingDocument = { ...searchQuery };
@@ -787,56 +964,56 @@ async loadAll(
           };
         }
       }
-  
+
       let updatedDocument = { ...matchingDocument };
       let updatedCount = 0;
-  
+
       for (const operation in updateQuery) {
         if (updateQuery.hasOwnProperty(operation)) {
           switch (operation) {
-            case '$set':
+            case "$set":
               opSet(updatedDocument, updateQuery[operation]);
               break;
-            case '$unset':
+            case "$unset":
               opUnset(updatedDocument, updateQuery[operation]);
               break;
-            case '$push':
+            case "$push":
               opPush(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$pull':
+            case "$pull":
               opPull(updatedDocument, updateQuery[operation]);
               break;
-            case '$addToSet':
+            case "$addToSet":
               opAddToSet(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$rename':
+            case "$rename":
               opRename(updatedDocument, updateQuery[operation]);
               break;
-            case '$min':
+            case "$min":
               opMin(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$max':
+            case "$max":
               opMax(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$mul':
+            case "$mul":
               opMul(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$inc':
+            case "$inc":
               opInc(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$bit':
+            case "$bit":
               opBit(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$currentDate':
+            case "$currentDate":
               opCurrentDate(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$pop':
+            case "$pop":
               opPop(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$slice':
+            case "$slice":
               opSlice(updatedDocument, updateQuery[operation], upsert);
               break;
-            case '$sort':
+            case "$sort":
               opSort(updatedDocument, updateQuery[operation], upsert);
               break;
             default:
@@ -848,11 +1025,11 @@ async loadAll(
           }
         }
       }
-  
+
       const index = currentData.findIndex((doc: any) =>
-        Object.keys(searchQuery).every(key => doc[key] === searchQuery[key])
+        Object.keys(searchQuery).every((key) => doc[key] === searchQuery[key])
       );
-  
+
       if (index !== -1) {
         currentData[index] = updatedDocument;
         updatedCount = 1;
@@ -860,23 +1037,23 @@ async loadAll(
         currentData.push(updatedDocument);
         updatedCount = 1;
       }
-  
+
       let data: any;
       if (this.secure.enable) {
         data = await encodeYAML(currentData, this.secure.secret);
       } else {
         data = yaml.stringify(currentData, null, 2);
       }
-  
+
       fs.writeFileSync(dataname, data);
-  
+
       logSuccess({
         content: `${updatedCount} document(s) updated`,
         devLogs: this.devLogs,
       });
-  
+
       this.emit("dataUpdated", updatedDocument);
-  
+
       return {
         acknowledged: true,
         message: `${updatedCount} document(s) updated successfully.`,
@@ -893,8 +1070,8 @@ async loadAll(
         results: null,
       };
     }
-  }  
-  
+  }
+
   async updateMany(
     dataname: string,
     query: any,
@@ -902,7 +1079,6 @@ async loadAll(
     loadedData?: any[]
   ): Promise<AdapterResults> {
     try {
-
       if (!query) {
         return {
           acknowledged: false,
@@ -910,7 +1086,7 @@ async loadAll(
           results: null,
         };
       }
-  
+
       if (!updateQuery) {
         return {
           acknowledged: false,
@@ -918,70 +1094,70 @@ async loadAll(
           results: null,
         };
       }
-  
+
       let loaded: any = {};
       if (!loadedData) {
         loaded = (await this.load(dataname)).results;
       } else {
         loaded = loadedData;
       }
-  
+
       let currentData: any[] = loaded;
       let updatedCount = 0;
       const updatedDocuments: any[] = [];
-  
+
       let foundMatch = false;
-  
+
       currentData.forEach((doc: any, index: number) => {
-        if (this.matchesQuery(doc, query)) { 
+        if (this.matchesQuery(doc, query)) {
           foundMatch = true;
           const updatedDocument = { ...doc };
           for (const operation in updateQuery) {
             if (updateQuery.hasOwnProperty(operation)) {
               switch (operation) {
-                case '$set':
+                case "$set":
                   opSet(updatedDocument, updateQuery[operation]);
                   break;
-                case '$unset':
+                case "$unset":
                   opUnset(updatedDocument, updateQuery[operation]);
                   break;
-                case '$push':
+                case "$push":
                   opPush(updatedDocument, updateQuery[operation]);
                   break;
-                case '$pull':
+                case "$pull":
                   opPull(updatedDocument, updateQuery[operation]);
                   break;
-                case '$addToSet':
+                case "$addToSet":
                   opAddToSet(updatedDocument, updateQuery[operation]);
                   break;
-                case '$rename':
+                case "$rename":
                   opRename(updatedDocument, updateQuery[operation]);
                   break;
-                case '$min':
+                case "$min":
                   opMin(updatedDocument, updateQuery[operation]);
                   break;
-                case '$max':
+                case "$max":
                   opMax(updatedDocument, updateQuery[operation]);
                   break;
-                case '$mul':
+                case "$mul":
                   opMul(updatedDocument, updateQuery[operation]);
                   break;
-                case '$inc':
+                case "$inc":
                   opInc(updatedDocument, updateQuery[operation]);
                   break;
-                case '$bit':
+                case "$bit":
                   opBit(updatedDocument, updateQuery[operation]);
                   break;
-                case '$currentDate':
+                case "$currentDate":
                   opCurrentDate(updatedDocument, updateQuery[operation]);
                   break;
-                case '$pop':
+                case "$pop":
                   opPop(updatedDocument, updateQuery[operation]);
                   break;
-                case '$slice':
+                case "$slice":
                   opSlice(updatedDocument, updateQuery[operation]);
                   break;
-                case '$sort':
+                case "$sort":
                   opSort(updatedDocument, updateQuery[operation]);
                   break;
                 default:
@@ -990,7 +1166,7 @@ async loadAll(
                     errorMessage: `Unsupported update operation: ${operation}`,
                     results: null,
                   };
-                }
+              }
             }
           }
           currentData[index] = updatedDocument;
@@ -998,7 +1174,7 @@ async loadAll(
           updatedCount++;
         }
       });
-  
+
       if (!foundMatch) {
         return {
           acknowledged: false,
@@ -1006,32 +1182,30 @@ async loadAll(
           results: null,
         };
       }
-  
-        let data: any;
-        if (this.secure.enable) {
-          data = await encodeYAML(currentData, this.secure.secret);
-        } else {
-          data = yaml.stringify(currentData, null, 2);
-        }
-  
-        fs.writeFileSync(dataname, data);
-  
-        logSuccess({
-          content: `${updatedCount} document(s) updated`,
-          devLogs: this.devLogs,
-        });
-  
-        updatedDocuments.forEach((doc: any) => {
-          this.emit("dataUpdated", doc);
-        });
-  
-        return {
-          acknowledged: true,
-          message: `${updatedCount} document(s) updated successfully.`,
-          results: updatedDocuments,
-        };
-      
 
+      let data: any;
+      if (this.secure.enable) {
+        data = await encodeYAML(currentData, this.secure.secret);
+      } else {
+        data = yaml.stringify(currentData, null, 2);
+      }
+
+      fs.writeFileSync(dataname, data);
+
+      logSuccess({
+        content: `${updatedCount} document(s) updated`,
+        devLogs: this.devLogs,
+      });
+
+      updatedDocuments.forEach((doc: any) => {
+        this.emit("dataUpdated", doc);
+      });
+
+      return {
+        acknowledged: true,
+        message: `${updatedCount} document(s) updated successfully.`,
+        results: updatedDocuments,
+      };
     } catch (e: any) {
       logError({
         content: e.message,
@@ -1050,44 +1224,44 @@ async loadAll(
       const results: SearchResult = {};
       for (const filter of collectionFilters) {
         const { dataname, displayment, filter: query } = filter;
-  
+
         let filePath: string;
-  
+
         if (!this.dataPath) throw new Error("Please provide a datapath ");
         if (this.secure.enable) {
           filePath = path.join(this.dataPath, `${dataname}.verse`);
         } else {
           filePath = path.join(this.dataPath, `${dataname}.json`);
         }
-  
+
         let jsonData: any;
-  
+
         if (this.secure.enable) {
           jsonData = await decodeYAML(filePath, this.secure.secret);
         } else {
           const data = await fs.promises.readFile(filePath, "utf-8");
           jsonData = yaml.stringify(data);
         }
-  
+
         let result = jsonData || [];
-  
+
         if (!jsonData) {
           jsonData = [];
         }
-  
+
         if (Object.keys(query).length !== 0) {
           result = jsonData.filter((item: any) => {
             return this.matchesQuery(item, query);
           });
         }
-  
+
         if (displayment !== null) {
           result = result.slice(0, displayment);
         }
-  
+
         results[dataname] = result;
       }
-  
+
       return {
         acknowledged: true,
         message: "Successfully searched in data for the given query.",
@@ -1099,18 +1273,17 @@ async loadAll(
         devLogs: this.devLogs,
         throwErr: false,
       });
-  
+
       return {
         acknowledged: true,
         errorMessage: `${e.message}`,
         results: null,
       };
     }
-  }  
+  }
 
   async drop(dataname: string): Promise<AdapterResults> {
     try {
-
       if (!fs.existsSync(dataname)) {
         return {
           acknowledged: true,
@@ -1118,24 +1291,22 @@ async loadAll(
           results: null,
         };
       }
-  
+
       fs.unlinkSync(dataname);
-  
+
       logSuccess({
         content: "File has been dropped",
         devLogs: this.devLogs,
       });
-  
+
       this.emit("dataDropped", `File ${dataname} has been dropped`);
-  
+
       return {
         acknowledged: true,
         message: `File dropped successfully.`,
         results: [],
       };
     } catch (e: any) {
-      console.log(e);
-  
       logError({
         content: e.message,
         devLogs: this.devLogs,
@@ -1228,8 +1399,13 @@ async loadAll(
     });
   }
 
-  public async nearbyVectors(data: nearbyOptions): Promise<AdapterResults> {
+  public async nearbyVectors(data?: nearbyOptions): Promise<AdapterResults> {
     const nearbyVectors = [];
+    if (!data)
+      return {
+        acknowledged: false,
+        errorMessage: "Invalid data.",
+      };
     const loaded: any = (await this.load(data.dataName)) || [];
     let currentData: any = loaded.results;
 
@@ -1555,123 +1731,330 @@ async loadAll(
       };
     }
   }
-  async batchTasks(tasks: Array<{
-    type: string, dataname: string, newData?: any, options?: any, 
-    loadedData?: any, query?: any, updateQuery?: any, upsert?: any,
-    collectionFilters?: any, from?: any, to?: any, pipline?: any
-   }>): Promise<AdapterResults> {
-   const taskResults: Array<{ type: string, results: AdapterResults }> = [];
+  async batchTasks(
+    tasks: Array<{
+      type: string;
+      dataname: string;
+      newData?: any;
+      options?: any;
+      loadedData?: any;
+      query?: any;
+      updateQuery?: any;
+      upsert?: any;
+      collectionFilters?: any;
+      from?: any;
+      to?: any;
+      pipline?: any;
+    }>
+  ): Promise<AdapterResults> {
+    const taskResults: Array<{ type: string; results: AdapterResults }> = [];
 
-   if (!this.dataPath) throw new Error('Invalid Usage. You need to provide dataPath folder in connection.')
+    if (!this.dataPath)
+      throw new Error(
+        "Invalid Usage. You need to provide dataPath folder in connection."
+      );
 
-   for (const task of tasks) {
-     const dataName: string = path.join(this.dataPath, `${task.dataname}.${this.secure.enable ? 'verse' : 'json'}`);
-     try {
-       let result: AdapterResults;
+    for (const task of tasks) {
+      const dataName: string = path.join(
+        this.dataPath,
+        `${task.dataname}.${this.secure.enable ? "verse" : "json"}`
+      );
+      try {
+        let result: AdapterResults;
 
-       switch (task.type) {
-         case 'load':
-           result = await this.load(dataName);
-           break;
-         case 'add':
-           result = await this.add(dataName, task.newData, task.options);
-           break;
-         case 'find':
-           result = await this.find(dataName, task.query, task.options, task.loadedData);
-           break;
-         case 'remove':
-           result = await this.remove(dataName, task.query, task.options);
-           break;
-         case 'update':
-           result = await this.update(dataName, task.query, task.updateQuery, task.upsert, task.loadedData);
-           break;
-         case 'updateMany':
-           result = await this.updateMany(dataName, task.query, task.updateQuery);
-           break;
-         case 'loadAll':
-           result = await this.loadAll(dataName, task.query, task.updateQuery);
-           break;
-         case 'search':
-           result = await this.search(task.collectionFilters);
-           break;
-         case 'drop':
-           result = await this.drop(dataName);
-           break;
-         case 'dataSize':
-           result = await this.dataSize(dataName);
-           break;
-         case 'moveData':
-           result = await this.moveData(task.from, task.to, task.options);
-           break;
-         case 'countDoc':
-           result = await this.countDoc(dataName);
-           break;
-         case 'countDoc':
-           result = await this.aggregate(dataName, task.pipline);
-           break;
-         default:
-           throw new Error(`Unknown task type: ${task.type}`);
-       }
-
-       taskResults.push({ type: task.type, results: result });
-     } catch (e: any) {
-       taskResults.push({ type: task.type, results: { acknowledged: false, errorMessage: e.message, results: null } });
-     }
-   }
-
-   const allAcknowledge = taskResults.every(({ results }) => results.acknowledged);
-
-   return {
-     acknowledged: allAcknowledge,
-     message: allAcknowledge ? "All tasks completed successfully." : "Some tasks failed to complete.",
-     results: taskResults,
-   };
- }
-
- async aggregate(dataname: string, pipeline: any[]): Promise<AdapterResults> {
-  try {
-    const loadedData = (await this.load(dataname)).results;
-    await this.index(dataname);
-    let aggregatedData = [...loadedData];
-
-    for (const stage of pipeline) {
-        if (stage.$match) {
-            aggregatedData = aggregatedData.filter(item => this.matchesQuery(item, stage.$match));
-        } else if (stage.$group) {
-            const groupId = stage.$group._id;
-            const groupedData: Record<string, any[]> = {};
-
-            for (const item of aggregatedData) {
-                const key = item[groupId];
-                if (!groupedData[key]) {
-                    groupedData[key] = [];
-                }
-                groupedData[key].push(item);
-            }
-
-            aggregatedData = Object.keys(groupedData).map(key => {
-                const groupItems = groupedData[key];
-                const aggregatedItem: Record<string, any> = { _id: key };
-
-                for (const [field, expr] of Object.entries(stage.$group)) {
-                    if (field === "_id") continue;
-                    const aggExpr = expr as AggregationExpression;
-                    if (aggExpr.$sum) {
-                        aggregatedItem[field] = groupItems.reduce((sum, item) => sum + item[aggExpr.$sum!], 0);
-                    }
-                }
-
-                return aggregatedItem;
-            });
+        switch (task.type) {
+          case "load":
+            result = await this.load(dataName);
+            break;
+          case "add":
+            result = await this.add(dataName, task.newData, task.options);
+            break;
+          case "find":
+            result = await this.find(
+              dataName,
+              task.query,
+              task.options,
+              task.loadedData
+            );
+            break;
+          case "remove":
+            result = await this.remove(dataName, task.query, task.options);
+            break;
+          case "update":
+            result = await this.update(
+              dataName,
+              task.query,
+              task.updateQuery,
+              task.upsert,
+              task.loadedData
+            );
+            break;
+          case "updateMany":
+            result = await this.updateMany(
+              dataName,
+              task.query,
+              task.updateQuery
+            );
+            break;
+          case "loadAll":
+            result = await this.loadAll(dataName, task.query, task.updateQuery);
+            break;
+          case "search":
+            result = await this.search(task.collectionFilters);
+            break;
+          case "drop":
+            result = await this.drop(dataName);
+            break;
+          case "dataSize":
+            result = await this.dataSize(dataName);
+            break;
+          case "moveData":
+            result = await this.moveData(task.from, task.to, task.options);
+            break;
+          case "countDoc":
+            result = await this.countDoc(dataName);
+            break;
+          case "countDoc":
+            result = await this.aggregate(dataName, task.pipline);
+            break;
+          default:
+            throw new Error(`Unknown task type: ${task.type}`);
         }
+
+        taskResults.push({ type: task.type, results: result });
+      } catch (e: any) {
+        taskResults.push({
+          type: task.type,
+          results: {
+            acknowledged: false,
+            errorMessage: e.message,
+            results: null,
+          },
+        });
+      }
     }
 
-    return { results: aggregatedData, acknowledged: true, message: 'This method is not complete. Please wait for next update' };
-  } catch (e) {
-    return { results: null, acknowledged: false, errorMessage: 'This method is not complete. Please wait for next update' };
-  }
-}
+    const allAcknowledge = taskResults.every(
+      ({ results }) => results.acknowledged
+    );
 
+    return {
+      acknowledged: allAcknowledge,
+      message: allAcknowledge
+        ? "All tasks completed successfully."
+        : "Some tasks failed to complete.",
+      results: taskResults,
+    };
+  }
+
+  async aggregate(dataname: string, pipeline: any[]): Promise<AdapterResults> {
+    try {
+      const loadedData = (await this.load(dataname)).results;
+      await this.index(dataname);
+      let aggregatedData = [...loadedData];
+
+      let filteredData = [...aggregatedData];
+
+      for (const stage of pipeline) {
+        if (stage.$match) {
+          filteredData = filteredData.filter((item) =>
+            this.matchesQuery(item, stage.$match)
+          );
+        } else if (stage.$unwind) {
+          const unwindField = stage.$unwind;
+          filteredData = filteredData.flatMap((item) => {
+            const fieldValue = item[unwindField];
+            if (Array.isArray(fieldValue)) {
+              return fieldValue.map((value) => ({
+                ...item,
+                [unwindField]: value,
+              }));
+            }
+            return item;
+          });
+        } else if (stage.$group) {
+          const groupId = stage.$group._id;
+          const groupedData: Record<string, any[]> = {};
+          const undefinedGroup: any[] = [];
+
+          for (const item of filteredData) {
+            const key = item[groupId] ?? "undefined";
+            if (!groupedData[key]) {
+              groupedData[key] = [];
+            }
+            if (key === "undefined") {
+              undefinedGroup.push(item);
+            } else {
+              groupedData[key].push(item);
+            }
+          }
+
+          aggregatedData = Object.entries(groupedData).map(
+            ([key, groupItems]) => {
+              const aggregatedItem: Record<string, any> = { _id: key };
+
+              for (const [field, expr] of Object.entries(stage.$group)) {
+                const aggExpr = expr as groupExp;
+                if (aggExpr.$sum) {
+                  aggregatedItem[field] = groupItems.reduce(
+                    (sum, item) => sum + (item[aggExpr.$sum!] || 0),
+                    0
+                  );
+                } else if (aggExpr.$avg) {
+                  aggregatedItem[field] =
+                    groupItems.reduce(
+                      (sum, item) => sum + (item[aggExpr.$avg!] || 0),
+                      0
+                    ) / groupItems.length;
+                } else if (aggExpr.$min) {
+                  aggregatedItem[field] = Math.min(
+                    ...groupItems.map((item) => item[aggExpr.$min!])
+                  );
+                } else if (aggExpr.$max) {
+                  aggregatedItem[field] = Math.max(
+                    ...groupItems.map((item) => item[aggExpr.$max!])
+                  );
+                } else if (aggExpr.$first) {
+                  aggregatedItem[field] = groupItems[0][aggExpr.$first!];
+                } else if (aggExpr.$last) {
+                  aggregatedItem[field] =
+                    groupItems[groupItems.length - 1][aggExpr.$last!];
+                } else if (aggExpr.$addToSet) {
+                  const addToSetField = aggExpr.$addToSet;
+                  aggregatedItem[field] = [
+                    ...new Set(groupItems.map((item) => item[addToSetField])),
+                  ];
+                } else if (aggExpr.$push) {
+                  const pushField = aggExpr.$push;
+                  aggregatedItem[field] = groupItems.map(
+                    (item) => item[pushField]
+                  );
+                }
+              }
+
+              return aggregatedItem;
+            }
+          );
+
+          if (undefinedGroup.length > 0) {
+            aggregatedData.push({ _id: "undefined", items: undefinedGroup });
+          }
+        } else if (stage.$addFields) {
+          const addFields = stage.$addFields;
+          filteredData.forEach((item) => {
+            Object.keys(addFields).forEach((field) => {
+              const fieldValue = addFields[field];
+              item[field] = fieldValue;
+            });
+          });
+        } else if (stage.$project) {
+          const projectFields = stage.$project;
+          filteredData = filteredData.map((item) => {
+            const projectedItem: any = {};
+            Object.entries(projectFields).forEach(([field, expression]) => {
+              if (typeof expression === "string") {
+                projectedItem[field] = this.getValueByPath(item, expression);
+              } else {
+                projectedItem[field] = expression;
+              }
+            });
+            return projectedItem;
+          });
+        } else if (stage.$facet) {
+          const facetStages = stage.$facet;
+          const facetResults: any = {};
+
+          for (const [facetName, facetPipeline] of Object.entries(
+            facetStages
+          )) {
+            const typedFacetPipeline: any[] = facetPipeline as any[];
+            facetResults[facetName] = await this.aggregate(
+              dataname,
+              typedFacetPipeline
+            );
+          }
+
+          filteredData.push(facetResults);
+        } else if (stage.$redact) {
+          const redactExpression = stage.$redact;
+          filteredData = filteredData.filter((item) =>
+            this.matchesQuery(item, redactExpression)
+          );
+        } else if (stage.$bucket) {
+          const bucketExpression = stage.$bucket;
+          const fieldName = bucketExpression.groupBy;
+          const boundaries = bucketExpression.boundaries;
+          const defaultBucket = bucketExpression.default;
+
+          filteredData.forEach((item) => {
+            const value = item[fieldName];
+            const bucketIndex = boundaries.findIndex(
+              (boundary: any) => value < boundary
+            );
+            if (bucketIndex !== -1) {
+              item.bucket = boundaries[bucketIndex];
+            } else {
+              item.bucket = defaultBucket;
+            }
+          });
+        } else if (stage.$lookup) {
+          const lookupExpression = stage.$lookup;
+          const from = lookupExpression.from;
+          const localField = lookupExpression.localField;
+          const foreignField = lookupExpression.foreignField;
+          const as = lookupExpression.as;
+
+          const foreignData = (await this.load(from)).results;
+
+          filteredData.forEach((item) => {
+            const localValue = item[localField];
+            item[as] = foreignData.filter((foreignItem: any) =>
+              this.matchesQuery(foreignItem, { [foreignField]: localValue })
+            );
+          });
+        } else if (stage.$sample) {
+          const sampleSize = stage.$sample;
+          filteredData = this.sample(filteredData, sampleSize);
+        } else if (stage.$sort) {
+          const sortField = Object.keys(stage.$sort)[0];
+          const sortOrder = stage.$sort[sortField] === 1 ? 1 : -1;
+          aggregatedData.sort((a, b) => {
+            if (a[sortField] < b[sortField]) return -1 * sortOrder;
+            if (a[sortField] > b[sortField]) return 1 * sortOrder;
+            return 0;
+          });
+        } else if (stage.$limit) {
+          const limitValue = stage.$limit;
+          if (filteredData.length > limitValue) {
+            filteredData = filteredData.slice(0, limitValue);
+          }
+        } else if (stage.$skip) {
+          const skipValue = stage.$skip;
+          if (filteredData.length > skipValue) {
+            filteredData = filteredData.slice(skipValue);
+          } else {
+            filteredData = [];
+          }
+        } else if (stage.$out) {
+          const outDataname = stage.$out;
+          await this.add(outDataname, filteredData);
+          filteredData = [];
+        }
+      }
+
+      return {
+        results: aggregatedData,
+        acknowledged: true,
+        message: "Aggregation completed successfully",
+      };
+    } catch (e: any) {
+      return {
+        results: null,
+        acknowledged: false,
+        errorMessage: `An error occurred during aggregation: ${e.message}`,
+      };
+    }
+  }
 
   async moveData(
     from: string,
@@ -1748,12 +2131,12 @@ async loadAll(
       data.push(...sourceData.results);
 
       let inData: any;
-      if (this.secure.enable && from.endsWith('.verse')) {
+      if (this.secure.enable && from.endsWith(".verse")) {
         inData = await encodeYAML(data, this.secure.secret);
       } else {
         inData = yaml.stringify(data);
       }
-       fs.writeFileSync(to, inData);
+      fs.writeFileSync(to, inData);
 
       logSuccess({
         content: "Moved Data Successfully.",
@@ -1776,5 +2159,28 @@ async loadAll(
         results: null,
       };
     }
+  }
+
+  private sample(data: any[], size: number): any[] {
+    const sampledData: any[] = [];
+    const sampleIndices: number[] = [];
+    const dataLength = data.length;
+
+    if (size >= dataLength) {
+      return data;
+    }
+
+    while (sampleIndices.length < size) {
+      const randomIndex = Math.floor(Math.random() * dataLength);
+      if (!sampleIndices.includes(randomIndex)) {
+        sampleIndices.push(randomIndex);
+      }
+    }
+
+    sampleIndices.forEach((index) => {
+      sampledData.push(data[index]);
+    });
+
+    return sampledData;
   }
 }

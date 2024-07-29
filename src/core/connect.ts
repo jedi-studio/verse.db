@@ -6,19 +6,30 @@ import {
   SecureSystem,
   DevLogsOptions,
   CollectionFilter,
-  DisplayOptions,
   operationKeys,
   QueryOptions,
+  JoinSQL,
+  StructureMethods,
+  ModelMethods,
 } from "../types/connect";
-import { searchFilters, nearbyOptions,  } from "../types/adapter";
+import { MigrationPath, nearbyOptions, TableOptions } from "../types/adapter";
 import Schema from "./functions/schema";
-import { jsonAdapter, yamlAdapter, sqlAdapter } from "../adapters/export";
+import {
+  jsonAdapter,
+  yamlAdapter,
+  sqlAdapter,
+  sessionAdapter,
+} from "../adapters/export";
 import { logError } from "./functions/logger";
+import EventEmitter from "events";
+import { SQLSchema } from "./functions/SQL-Schemas";
+
 /**
  * The main connect class for interacting with the database
  */
-export default class connect {
-  public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null;
+export default class connect extends EventEmitter {
+  public adapter: jsonAdapter | yamlAdapter | sqlAdapter | null = null; // i tried to fix it can you do ? i did and i faied somehow and when i asked GPT he told me not to
+  public sessionAdapter: sessionAdapter | null = null; // np
   public devLogs: DevLogsOptions;
   public SecureSystem: SecureSystem;
   public backup: BackupOptions;
@@ -33,6 +44,7 @@ export default class connect {
    */
 
   constructor(options: AdapterOptions) {
+    super();
     this.dataPath = options.dataPath;
     this.devLogs = options.devLogs ?? { enable: false, path: "" };
     this.SecureSystem = options.secure ?? { enable: false, secret: "" };
@@ -52,16 +64,19 @@ export default class connect {
     switch (options.adapter) {
       case "json":
         this.adapter = new jsonAdapter(adapterOptions, this.SecureSystem);
+        this.sessionAdapter = null;
         this.fileType = this.SecureSystem?.enable ? "verse" : "json";
         this.adapterType = "json";
         break;
       case "yaml":
         this.adapter = new yamlAdapter(adapterOptions, this.SecureSystem);
+        this.sessionAdapter = null;
         this.fileType = this.SecureSystem?.enable ? "verse" : "yaml";
         this.adapterType = "yaml";
         break;
       case "sql":
         this.adapter = new sqlAdapter(adapterOptions, this.SecureSystem);
+        this.sessionAdapter = null;
         this.fileType = this.SecureSystem?.enable ? "verse" : "sql";
         this.adapterType = "sql";
         break;
@@ -85,30 +100,34 @@ export default class connect {
       fs.mkdirSync(this.backup.path, { recursive: true });
     }
 
-    if (this.SecureSystem && this.SecureSystem.enable && this.SecureSystem.secret) {
-      const configPath = path.join(this.dataPath, '.config');
-      const secretsFilePath = path.join(configPath, '.secrets.env');
+    if (
+      this.SecureSystem &&
+      this.SecureSystem.enable &&
+      this.SecureSystem.secret
+    ) {
+      const configPath = path.join(this.dataPath, ".config");
+      const secretsFilePath = path.join(configPath, ".secrets.env");
       const secretString = `SECRET=${this.SecureSystem.secret}\n`;
-    
+
       try {
         if (!fs.existsSync(configPath)) {
           fs.mkdirSync(configPath);
         }
-    
+
         if (!fs.existsSync(secretsFilePath)) {
           fs.writeFileSync(secretsFilePath, secretString);
         } else {
           fs.appendFileSync(secretsFilePath, secretString);
         }
-      } catch (e: any) {        
-        if (e.code === 'ENOENT' && e.path === configPath) {
+      } catch (e: any) {
+        if (e.code === "ENOENT" && e.path === configPath) {
           fs.mkdirSync(configPath, { recursive: true });
           fs.writeFileSync(secretsFilePath, secretString);
-        } else if (e.code === 'ENOENT' && e.path === secretsFilePath) {
+        } else if (e.code === "ENOENT" && e.path === secretsFilePath) {
           fs.writeFileSync(secretsFilePath, secretString);
         }
       }
-    }     
+    }
   }
 
   /**
@@ -125,9 +144,53 @@ export default class connect {
       });
     }
 
-    const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+    if (
+      !(this.adapter instanceof sqlAdapter) &&
+      typeof this.adapter?.load === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.load(filePath);
+    } else {
+      logError({
+        content: "Load operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
 
-    return await this.adapter?.load(filePath);
+  async findCollection(
+    dataname: string,
+    check: "startsWith" | "endsWith" | "normal"
+  ) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
+    }
+
+    return await this.adapter?.findCollection(dataname, check);
+  }
+
+  async updateCollection(dataname: string, newDataName: string) {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
+    }
+    return await this.adapter?.updateCollection(dataname, newDataName);
   }
 
   /**
@@ -135,28 +198,43 @@ export default class connect {
    * @param {string} dataname - The name of the data file
    * @returns {Promise<any[]>} - A Promise that resolves with the loaded data and watch it
    */
-  async watch(dataname: string): Promise<any> {
+  async watch(dataname: string, schema?: SQLSchema): Promise<void> {
     const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-    return new Promise((resolve, reject) => {
-      fs.watchFile(filePath, { interval: 5 }, async (curr: any, prev: any) => {
-        if (curr.mtime !== prev.mtime) {
-          try {
-            const loadedData = await this.adapter?.load(filePath);
-            resolve(loadedData);
-          } catch (error) {
-            reject(error);
-          }
-        }
-      });
 
-       fs.watchFile(filePath, (curr: any, prev: any) => {
-        if (curr.size < 0) {
-          reject(new Error("File does not exist."));
+    try {
+      await fs.promises.stat(filePath);
+    } catch (error) {
+      this.emit("error", new Error("File does not exist."));
+      return;
+    }
+
+    fs.watchFile(filePath, { interval: 5000 }, async (curr, prev) => {
+      if (curr.mtime !== prev.mtime) {
+        try {
+          let loadedData;
+          if (
+            this.adapter &&
+            "load" in this.adapter &&
+            typeof this.adapter.load === "function"
+          ) {
+            loadedData = await this.adapter.load(filePath);
+          } else if (
+            this.adapter &&
+            "loadData" in this.adapter &&
+            typeof this.adapter.loadData === "function" &&
+            schema
+          ) {
+            loadedData = await this.adapter.loadData(filePath, schema);
+          }
+          if (loadedData) {
+            this.emit("change", loadedData);
+          }
+        } catch (error) {
+          this.emit("error", error);
         }
-      });
+      }
     });
   }
-
   /**
    * Add data to a data file
    * @param {string} dataname - The name of the data file
@@ -171,6 +249,10 @@ export default class connect {
         devLogs: this.devLogs,
         throwErr: true,
       });
+    }
+
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
     }
 
     if (
@@ -193,7 +275,12 @@ export default class connect {
    * @param query the search query
    * @returns the found data
    */
-  async find(dataname: string, query: any, options?: QueryOptions, loadedData?: any[]) {
+  async find(
+    dataname: string,
+    query: any,
+    options?: QueryOptions,
+    loadedData?: any[]
+  ) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -202,9 +289,13 @@ export default class connect {
       });
     }
 
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
+    }
+
     if (
       !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.add === "function"
+      typeof this.adapter?.find === "function"
     ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
       return await this.adapter?.find(filePath, query, options, loadedData);
@@ -223,13 +314,17 @@ export default class connect {
    * @param displayOptions the options of the display of the data files
    * @returns all the data files you selected
    */
-  async loadAll(dataname: string, displayOptions: any, loadedData?: any[] ) {
+  async loadAll(dataname: string, displayOptions: any, loadedData?: any[]) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
         devLogs: this.devLogs,
         throwErr: true,
       });
+    }
+
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
     }
 
     if (
@@ -248,7 +343,7 @@ export default class connect {
     }
   }
 
-   /**
+  /**
    *
    * @param dataname the name of data files to get multiple files in the same time
    * @param pipeline the options of the aggregation
@@ -263,6 +358,10 @@ export default class connect {
       });
     }
 
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
+    }
+
     if (
       !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.aggregate === "function"
@@ -271,17 +370,16 @@ export default class connect {
       return await this.adapter?.aggregate(filePath, pipeline);
     } else {
       logError({
-        content:
-          "Aggregate operation is not supported by the current adapter.",
+        content: "Aggregate operation is not supported by the current adapter.",
         devLogs: this.devLogs,
         throwErr: true,
       });
     }
   }
   /**
-   * 
+   *
    * @param {any[]} operations - array of objects that contains the operations you want
-   * @returns 
+   * @returns
    */
   async batchTasks(operations: any[]) {
     if (!this.adapter) {
@@ -291,29 +389,20 @@ export default class connect {
         throwErr: true,
       });
     }
-
-    if (
-      !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.batchTasks === "function"
-    ) {
-      return await this.adapter?.batchTasks(operations);
-    } else {
-      logError({
-        content:
-          "DisplayData operation is not supported by the current adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
     }
+
+    return await this.adapter?.batchTasks(operations);
   }
-/**
- * Remove data from the database.
- * @param {string} dataname - The name of the data to be removed.
- * @param {any} query - The query to identify the data to be removed.
- * @param {Object} options - Options for the remove operation.
- * @param {number} options.docCount - Number of documents to remove.
- * @returns {Promise} A Promise that resolves when the operation is completed.
- */
+  /**
+   * Remove data from the database.
+   * @param {string} dataname - The name of the data to be removed.
+   * @param {any} query - The query to identify the data to be removed.
+   * @param {Object} options - Options for the remove operation.
+   * @param {number} options.docCount - Number of documents to remove.
+   * @returns {Promise} A Promise that resolves when the operation is completed.
+   */
   async remove(dataname: string, query: any, options: { docCount: number }) {
     if (!this.adapter) {
       logError({
@@ -321,6 +410,9 @@ export default class connect {
         devLogs: this.devLogs,
         throwErr: true,
       });
+    }
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
     }
 
     if (
@@ -348,13 +440,23 @@ export default class connect {
    * @param upsert an upsert option
    * @returns returnts edited data
    */
-  async update(dataname: string, query: any, newData: operationKeys, upsert?: boolean, loadedData?: any[]) {
+  async update(
+    dataname: string,
+    query: any,
+    newData: operationKeys,
+    upsert?: boolean,
+    loadedData?: any[]
+  ) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
         devLogs: this.devLogs,
         throwErr: true,
       });
+    }
+
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
     }
 
     if (
@@ -383,14 +485,23 @@ export default class connect {
         devLogs: this.devLogs,
         throwErr: true,
       });
+      return;
     }
 
-    if (typeof this.adapter?.drop === "function") {
+    if ("drop" in this.adapter && typeof this.adapter.drop === "function") {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.drop(filePath);
+      try {
+        await this.adapter.drop(filePath);
+      } catch (error) {
+        logError({
+          content: `Error dropping data: ${error}`,
+          devLogs: this.devLogs,
+          throwErr: true,
+        });
+      }
     } else {
       logError({
-        content: "Database not connected. Please call connect method first.",
+        content: "Drop operation not supported by this adapter.",
         devLogs: this.devLogs,
         throwErr: true,
       });
@@ -409,6 +520,9 @@ export default class connect {
         devLogs: this.devLogs,
         throwErr: true,
       });
+    }
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
     }
 
     if (
@@ -439,11 +553,11 @@ export default class connect {
       });
     }
   }
-/**
- * Get nearby vectors from the database.
- * @param {nearbyOptions} data - Options for the nearby vectors search.
- * @returns {Promise} A Promise that resolves with nearby vectors.
- */
+  /**
+   * Get nearby vectors from the database.
+   * @param {nearbyOptions} data - Options for the nearby vectors search.
+   * @returns {Promise} A Promise that resolves with nearby vectors.
+   */
   async nearbyVectors(data: nearbyOptions) {
     try {
       if (!this.adapter) {
@@ -494,12 +608,12 @@ export default class connect {
       return null;
     }
   }
-/**
- * Create a buffer zone in the database.
- * @param {any} geometry - The geometry used for creating the buffer zone.
- * @param {any} bufferDistance - The buffer distance.
- * @returns {Promise} A Promise that resolves with the created buffer zone.
- */
+  /**
+   * Create a buffer zone in the database.
+   * @param {any} geometry - The geometry used for creating the buffer zone.
+   * @param {any} bufferDistance - The buffer distance.
+   * @returns {Promise} A Promise that resolves with the created buffer zone.
+   */
   async polygonArea(polygonCoordinates: any) {
     try {
       if (!this.adapter) {
@@ -552,12 +666,12 @@ export default class connect {
       return null;
     }
   }
-/**
- * Create a buffer zone in the database.
- * @param {any} geometry - The geometry used for creating the buffer zone.
- * @param {any} bufferDistance - The buffer distance.
- * @returns {Promise} A Promise that resolves with the created buffer zone.
- */
+  /**
+   * Create a buffer zone in the database.
+   * @param {any} geometry - The geometry used for creating the buffer zone.
+   * @param {any} bufferDistance - The buffer distance.
+   * @returns {Promise} A Promise that resolves with the created buffer zone.
+   */
   async bufferZone(geometry: any, bufferDistance: any) {
     try {
       if (!this.adapter) {
@@ -608,13 +722,13 @@ export default class connect {
       return null;
     }
   }
-/**
- * Update multiple documents in the database.
- * @param {string} dataname - The name of the data to be updated.
- * @param {Array<any>} queries - Array of queries to identify the data to be updated.
- * @param {operationKeys} newData - The updated data.
- * @returns {Promise} A Promise that resolves when the operation is completed.
- */
+  /**
+   * Update multiple documents in the database.
+   * @param {string} dataname - The name of the data to be updated.
+   * @param {Array<any>} queries - Array of queries to identify the data to be updated.
+   * @param {operationKeys} newData - The updated data.
+   * @returns {Promise} A Promise that resolves when the operation is completed.
+   */
   async updateMany(dataname: string, queries: any, newData: operationKeys) {
     if (!this.adapter) {
       logError({
@@ -622,6 +736,10 @@ export default class connect {
         devLogs: this.devLogs,
         throwErr: true,
       });
+    }
+
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
     }
 
     if (
@@ -638,340 +756,6 @@ export default class connect {
       });
     }
   }
-  /**
-   * a function to create a new table in SQL database (Note*: this is only supported for SQL adapter)
-   * @param dataname the name of the data file
-   * @param tableName the table name
-   * @param tableDefinition the definition of the table
-   * @returns new table in the database
-   */
-  async createTable(
-    dataname: string,
-    tableName: string,
-    tableDefinition: string
-  ) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.createTable === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.createTable(
-        filePath,
-        tableName,
-        tableDefinition
-      );
-    } else {
-      logError({
-        content: "Create Table operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a function to insert data to a table in the database (Note*: this is only supported for SQL adapter)
-   * @param dataname the name of the data file
-   * @param tableName the name of the table you want to insert the data to
-   * @param data the date that is going to be inserted
-   * @returns inserted data to the table in the database file
-   */
-  async insertData(dataname: string, tableName: string, data: any[]) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.insertData === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.insertData(filePath, tableName, data);
-    } else {
-      logError({
-        content: "Insert Data operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a function to find data in a table (Note*: this is only supported for SQL adapter)
-   * @param dataname the name of the data file
-   * @param tableName the name of the table to find in
-   * @param condition the conditions you want to find with
-   * @returns found data
-   */
-  async findData(dataname: string, tableName: string, condition?: string) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.find === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.find(filePath, tableName, condition);
-    } else {
-      logError({
-        content: "Find Data operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  async join(
-    dataname: string,
-    searchOptions: { table: string; query: string }[],
-    displayOptions?: searchFilters
-  ) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.search === "function"
-    ) {
-      const sourceFilePath = path.join(
-        this.dataPath,
-        `${dataname}.${this.fileType}`
-      );
-      const result = await this.adapter.search(
-        dataname,
-        searchOptions,
-        displayOptions
-      );
-      return result;
-    } else {
-      logError({
-        content: "Join operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a function to remove data from a table (Note*: this is only supported for SQL adapter)
-   * @param dataname the name of the data file you want to use
-   * @param tableName the name of the table
-   * @param dataToRemove the date you want to remove
-   * @returns removed data from the table
-   */
-  async removeData(dataname: string, tableName: string, dataToRemove: any[]) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.removeData === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.removeData(filePath, tableName, dataToRemove);
-    } else {
-      logError({
-        content: "Remove Data operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a fundtion to update the data in the sql database (Note*: this is only supported for SQL adapter)
-   * @param dataname the name of date file
-   * @param tableName the table name
-   * @param query the search query
-   * @param newData the new data that is going to be replaced with the old data
-   * @returns updataed data
-   */
-  async updateData(
-    dataname: string,
-    tableName: string,
-    query: any,
-    newData: operationKeys
-  ) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.update === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.update(filePath, tableName, query, newData);
-    } else {
-      logError({
-        content: "Update Data operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a function to multi update operation (Note*: this is only supported for SQL adapter)
-   * @param dataname the data file name you want to update
-   * @param tableName the tables name
-   * @param queries the queries you want to search with
-   * @param newData the new data that is going to be replaced with the old data
-   * @returns updated data in multiple files or tables
-   */
-
-  async multiUpdate(
-    dataname: string,
-    tableName: string,
-    queries: any[],
-    newData: operationKeys
-  ) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.updateMany === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.updateMany(
-        filePath,
-        tableName,
-        queries,
-        newData
-      );
-    } else {
-      logError({
-        content: "Multi Update operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a function to display all the data in the sql adapter database (Note*: this is only supported for SQL adapter)
-   * @param dataname the date names you want to display
-   * @param displayOption the display options you want to display
-   * @returns all the data you want to display
-   */
-  async displayAll(dataname: string, displayOption: DisplayOptions) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.allData === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.allData(filePath, displayOption);
-    } else {
-      logError({
-        content: "Display All data operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a function to drop data ot a table (Note*: this is only supported for SQL adapter)
-   * @param dataname the data file name you want to drop
-   * @param tableName the table name you want to drop
-   * @returns droped data
-   */
-  async dropData(dataname: string, tableName?: string) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.drop === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.drop(filePath, tableName);
-    } else {
-      logError({
-        content: "Drop Data operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
 
   /**
    * a function to count the data documents in the database (Note*: this is only supported for SQL adapter)
@@ -979,7 +763,7 @@ export default class connect {
    * @param tableName the table name
    * @returns documents count
    */
-  async countDoc(dataname: string, tableName?: string) {
+  async countDoc(dataname: string) {
     if (!this.adapter) {
       logError({
         content: "Database not connected. Please call connect method first.",
@@ -987,52 +771,20 @@ export default class connect {
         throwErr: true,
       });
     }
-    const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
+    }
 
     if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
+      !(this.adapter instanceof sqlAdapter) &&
       typeof this.adapter?.countDoc === "function"
     ) {
-      if (!tableName)
-        throw new Error("Table name is required for count document operation.");
-      return await this.adapter?.countDoc(filePath, tableName);
-    } else if (
-      this.adapter instanceof jsonAdapter ||
-      this.adapter instanceof yamlAdapter
-    ) {
-      return await this.adapter?.countDoc(filePath);
-    }
-  }
-
-  /**
-   * a function to give you the count of the tables in the dataname file (Note*: this is only supported for SQL adapter)
-   * @param dataname the data file name you want to get the number of the tables in
-   * @returns number of the tables in the dataname
-   */
-  async countTable(dataname: string) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.countTable === "function"
-    ) {
       const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.countTable(filePath);
+      return await this.adapter?.countDoc(filePath);
     } else {
       logError({
-        content: "Count Table operation only supports sql adapter.",
+        content: "countDoc operation only supports Json & Yaml adapters.",
         devLogs: this.devLogs,
         throwErr: true,
       });
@@ -1052,136 +804,21 @@ export default class connect {
         throwErr: true,
       });
     }
+    if (this.adapter instanceof sessionAdapter) {
+      return null;
+    }
 
     const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
     return await this.adapter?.dataSize(filePath);
   }
 
   /**
-   * a funciton to remove a key from the database table (Note*: this is only supported for SQL adapter)
-   * @param dataname the data file name
-   * @param tableName the table name
-   * @param keyToRemove the key you want to remove
-   * @returns removed key
+   * Define a model for interacting with the database.
+   * @param {string} dataname - The name of the schema.
+   * @param {Schema} schema - The schema definition.
+   * @returns {Object} An object containing database operation functions.
    */
-  async removeKey(dataname: string, tableName: string, keyToRemove: string) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.removeKey === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.removeKey(filePath, tableName, keyToRemove);
-    } else {
-      logError({
-        content: "Remove Key operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   *
-   * @param dataname the data file name you want (Note*: this is only supported for SQL adapter)
-   * @param tableName the table name you want
-   * @param keyToRemove the key to remove
-   * @returns removed key
-   */
-  async toJSON(dataname: string) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.removeKey === "function"
-    ) {
-      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
-      return await this.adapter?.toJSON(filePath);
-    } else {
-      logError({
-        content: "toJSON operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-  /**
-   * a function to move a table from a database to another database file (Note*: this is only supported for SQL adapter)
-   * @param {from} from the dataname
-   * @param {to} to the dataname
-   * @param {table} the table you want to move
-   * @returns moved table
-   */
-  async moveTable({
-    from,
-    to,
-    table,
-  }: {
-    from: string;
-    to: string;
-    table: string;
-  }) {
-    if (!this.adapter) {
-      logError({
-        content: "Database not connected. Please call connect method first.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-
-    if (
-      !(
-        this.adapter instanceof jsonAdapter ||
-        this.adapter instanceof yamlAdapter
-      ) &&
-      typeof this.adapter?.removeKey === "function"
-    ) {
-      const sourceFilePath = path.join(
-        this.dataPath,
-        `${from}.${this.fileType}`
-      );
-      const result = await this.adapter.migrateTable({
-        from: sourceFilePath,
-        to,
-        table,
-      });
-      return result;
-    } else {
-      logError({
-        content: "Move Table operation only supports sql adapter.",
-        devLogs: this.devLogs,
-        throwErr: true,
-      });
-    }
-  }
-
-/**
- * Define a model for interacting with the database.
- * @param {string} dataname - The name of the schema.
- * @param {Schema} schema - The schema definition.
- * @returns {Object} An object containing database operation functions.
- */
-   model(dataname: string, schema: Schema): any {
+  model(dataname: string, schema: Schema): ModelMethods | undefined {
     if (!dataname || !schema) {
       logError({
         content:
@@ -1193,33 +830,36 @@ export default class connect {
 
     if (
       !(this.adapter instanceof sqlAdapter) &&
-      typeof this.adapter?.add === "function"
+      typeof this.adapter?.load === "function"
     ) {
       return {
-      /**
-       * Add data to the database.
-       * @param {any} newData - The data to be added.
-       * @param {any} [options] - Additional options for the operation.
-       * @returns {Promise} A Promise that resolves when the operation is completed.
-       */
-      
+        /**
+         * Add data to the database.
+         * @param {any} newData - The data to be added.
+         * @param {any} [options] - Additional options for the operation.
+         * @returns {Promise} A Promise that resolves when the operation is completed.
+         */
+
         add: async function (this: connect, newData: any, options?: any) {
           const loadingData = await this.load(dataname);
           const currenData = loadingData?.results;
-          const validationErrors: any = schema.validate(newData, currenData);
+          const validationErrors: any = await schema.validate(
+            newData,
+            currenData
+          );
           if (validationErrors) {
             return Promise.reject(validationErrors);
           }
 
           return await this.add(dataname, newData, options);
         }.bind(this),
-      /**
-       * Remove data from the database.
-       * @param {any} query - The query to identify the data to be removed.
-       * @param {Object} options - Options for the remove operation.
-       * @param {number} options.docCount - Number of documents to remove.
-       * @returns {Promise} A Promise that resolves when the operation is completed.
-       */
+        /**
+         * Remove data from the database.
+         * @param {any} query - The query to identify the data to be removed.
+         * @param {Object} options - Options for the remove operation.
+         * @param {number} options.docCount - Number of documents to remove.
+         * @returns {Promise} A Promise that resolves when the operation is completed.
+         */
         remove: async function (
           this: connect,
           query: any,
@@ -1227,101 +867,101 @@ export default class connect {
         ) {
           return await this.remove(dataname, query, options);
         }.bind(this),
-      /**
-       * Update data in the database.
-       * @param {any} query - The query to identify the data to be updated.
-       * @param {any} newData - The updated data.
-       * @param {boolean} upsert - Whether to perform an upsert operation.
-       * @returns {Promise} A Promise that resolves when the operation is completed.
-       */
+        /**
+         * Update data in the database.
+         * @param {any} query - The query to identify the data to be updated.
+         * @param {any} newData - The updated data.
+         * @param {boolean} upsert - Whether to perform an upsert operation.
+         * @returns {Promise} A Promise that resolves when the operation is completed.
+         */
         update: async function (
           this: connect,
           query: any,
           newData: any,
           upsert: boolean
         ) {
-          const validationErrors: any = schema.validate(newData);
+          const validationErrors: any = await schema.validate(newData);
           if (validationErrors) {
             return Promise.reject(validationErrors);
           }
 
           return await this.update(dataname, query, newData, upsert);
         }.bind(this),
-      /**
-       * Find data in the database.
-       * @param {any} query - The query to find the data.
-       * @returns {Promise} A Promise that resolves with the found data.
-       */
+        /**
+         * Find data in the database.
+         * @param {any} query - The query to find the data.
+         * @returns {Promise} A Promise that resolves with the found data.
+         */
         find: async function (this: connect, query: any) {
           const loadingData = await this.load(dataname);
           const currenData = loadingData?.results;
           return await this.find(dataname, query, currenData);
         }.bind(this),
-      /**
-       * Load a database.
-       * @returns {Promise} A Promise that resolves when the database is loaded.
-       */
+        /**
+         * Load a database.
+         * @returns {Promise} A Promise that resolves when the database is loaded.
+         */
         load: async function (this: connect) {
           return await this.load(dataname);
         }.bind(this),
-      /**
-       * Drop a database.
-       * @returns {Promise} A Promise that resolves when the database is dropped.
-       */
+        /**
+         * Drop a database.
+         * @returns {Promise} A Promise that resolves when the database is dropped.
+         */
         drop: async function (this: connect) {
           return await this.drop(dataname);
         }.bind(this),
-      /**
-       * Update multiple documents in the database.
-       * @param {Array<any>} queries - Array of queries to identify the data to be updated.
-       * @param {operationKeys} newData - The updated data.
-       * @returns {Promise} A Promise that resolves when the operation is completed.
-       */
+        /**
+         * Update multiple documents in the database.
+         * @param {Array<any>} queries - Array of queries to identify the data to be updated.
+         * @param {operationKeys} newData - The updated data.
+         * @returns {Promise} A Promise that resolves when the operation is completed.
+         */
         updateMany: async function (
           this: connect,
           queries: any[],
           newData: operationKeys
         ) {
-          const validationErrors: any = schema.validate(newData);
+          const validationErrors: any = await schema.validate(newData);
           if (validationErrors) {
             return Promise.reject(validationErrors);
           }
 
           return await this.updateMany(dataname, queries, newData);
         }.bind(this),
-      /**
-       * Load all data from the database.
-       * @param {any} displayOptions - Options for displaying the data.
-       * @returns {Promise} A Promise that resolves with all data from the database.
-       */
+        /**
+         * Load all data from the database.
+         * @param {any} displayOptions - Options for displaying the data.
+         * @returns {Promise} A Promise that resolves with all data from the database.
+         */
         allData: async function (this: connect, displayOptions: any) {
           return await this.loadAll(dataname, displayOptions);
         }.bind(this),
-      /**
-       * Search for data in the database.
-       * @param {Array<CollectionFilter>} collectionFilters - Filters to apply to the search.
-       * @returns {Promise} A Promise that resolves with the search results.
-       */
+        /**
+         * Search for data in the database.
+         * @param {Array<CollectionFilter>} collectionFilters - Filters to apply to the search.
+         * @returns {Promise} A Promise that resolves with the search results.
+         */
         search: async function (
           this: connect,
           collectionFilters: CollectionFilter[]
         ) {
           return await this.search(collectionFilters);
         }.bind(this),
-      /**
-       * Get nearby vectors in the database.
-       * @param {any} data - The data used for the search.
-       * @returns {Promise} A Promise that resolves with nearby vectors.
-       */
+        /**
+         * Get nearby vectors in the database.
+         * @param {any} data - The data used for the search.
+         * @returns {Promise} A Promise that resolves with nearby vectors.
+         */
         nearbyVectors: async function (this: connect, data: any) {
           return await this.nearbyVectors(data);
         }.bind(this),
-      /**
-       * Create a buffer zone in the database.
-       * @param {any} geometry - The geometry used for creating the buffer zone.
-       * @param {any} bufferDistance - The buffer distance.
-       * @returns {Promise} A Promise that resolves with the created buffer zone.
-       */
+        /**
+         * Create a buffer zone in the database.
+         * @param {any} geometry - The geometry used for creating the buffer zone.
+         * @param {any} bufferDistance - The buffer distance.
+         * @returns {Promise} A Promise that resolves with the created buffer zone.
+         */
         bufferZone: async function (
           this: connect,
           geometry: any,
@@ -1329,40 +969,40 @@ export default class connect {
         ) {
           return await this.bufferZone(geometry, bufferDistance);
         }.bind(this),
-      /**
-       * Calculate the area of a polygon in the database.
-       * @param {any} polygonCoordinates - The coordinates of the polygon.
-       * @returns {Promise} A Promise that resolves with the area of the polygon.
-       */
+        /**
+         * Calculate the area of a polygon in the database.
+         * @param {any} polygonCoordinates - The coordinates of the polygon.
+         * @returns {Promise} A Promise that resolves with the area of the polygon.
+         */
         polygonArea: async function (this: connect, polygonCoordinates: any) {
           return await this.polygonArea(polygonCoordinates);
         }.bind(this),
-      /**
-       * Count documents in the database.
-       * @returns {Promise} A Promise that resolves with the count of documents.
-       */
+        /**
+         * Count documents in the database.
+         * @returns {Promise} A Promise that resolves with the count of documents.
+         */
         countDoc: async function (this: connect) {
           return await this.countDoc(dataname);
         }.bind(this),
-      /**
-       * Get the size of data in the database.
-       * @returns {Promise} A Promise that resolves with the size of data.
-       */
+        /**
+         * Get the size of data in the database.
+         * @returns {Promise} A Promise that resolves with the size of data.
+         */
         dataSize: async function (this: connect) {
           return await this.dataSize(dataname);
         }.bind(this),
-      /**
-       * Watch for changes in the database.
-       * @returns {Promise} A Promise that resolves with the changes in the database.
-       */
+        /**
+         * Watch for changes in the database.
+         * @returns {Promise} A Promise that resolves with the changes in the database.
+         */
         watch: async function (this: connect) {
           return await this.watch(dataname);
         }.bind(this),
-      /**
-       * Perform batch tasks in the database.
-       * @param {Array<any>} operations - Array of operations to perform.
-       * @returns {Promise} A Promise that resolves when batch tasks are completed.
-       */
+        /**
+         * Perform batch tasks in the database.
+         * @param {Array<any>} operations - Array of operations to perform.
+         * @returns {Promise} A Promise that resolves when batch tasks are completed.
+         */
         batchTasks: async function (this: connect, operations: any[]) {
           return this.batchTasks(operations);
         }.bind(this),
@@ -1372,8 +1012,788 @@ export default class connect {
       };
     } else {
       logError({
+        content: "The current adapter doesn't support this method.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Loads data from a file using the specified schema.
+   *
+   * @param {string} dataname - The name of the data file to load.
+   * @param {SQLSchema} schema - The schema to use for loading data.
+   * @returns {Promise<any>} - The data loaded from the file.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async loadData(dataname: string, schema: SQLSchema) {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.loadData === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.loadData(filePath, schema);
+    } else {
+      console.error(
+        "LoadData operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Creates a table in the database using the specified schema.
+   *
+   * @param {string} dataname - The name of the data file to create the table in.
+   * @param {SQLSchema} schema - The schema to use for creating the table.
+   * @returns {Promise<any>} - The result of the table creation.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async createTable(dataname: string, schema: SQLSchema) {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.createTable === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.createTable(filePath, schema);
+    } else {
+      console.error(
+        "CreateTable operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Inserts data into a file using the specified schema.
+   *
+   * @param {string} dataname - The name of the data file to insert data into.
+   * @param {object} data - The data to insert, including schema and dataArray.
+   * @param {SQLSchema} data.schema - The schema to use for inserting data.
+   * @param {any[]} data.dataArray - The array of data to insert.
+   * @returns {Promise<any>} - The result of the data insertion.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async insertData(
+    dataname: string,
+    data: { schema: SQLSchema; dataArray: any[] }
+  ): Promise<any> {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.insertData === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.insertData(filePath, data);
+    } else {
+      console.error(
+        "InsertData operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Selects data from a file using the specified schema and query.
+   *
+   * @param {string} dataname - The name of the data file to select data from.
+   * @param {object} data - The data to select, including query, schema, and optionally loadedData.
+   * @param {any} data.query - The query to use for selecting data.
+   * @param {SQLSchema} data.schema - The schema to use for selecting data.
+   * @param {any[]} [data.loadedData] - Optional previously loaded data.
+   * @returns {Promise<any>} - The result of the data selection.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async selectData(
+    dataname: string,
+    data: { query: any; schema: SQLSchema; loadedData?: any[] }
+  ): Promise<any> {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.selectData === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.selectData(filePath, data);
+    } else {
+      console.error(
+        "SelectData operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Selects all data from a file using the specified schema and query.
+   *
+   * @param {string} dataname - The name of the data file to select data from.
+   * @param {object} data - The data to select, including query, schema, and loadedData.
+   * @param {any} data.query - The query to use for selecting data.
+   * @param {SQLSchema} data.schema - The schema to use for selecting data.
+   * @param {any[]} data.loadedData - The previously loaded data.
+   * @returns {Promise<any>} - The result of the data selection.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async selectAll(
+    dataname: string,
+    data: { query: any; schema: SQLSchema; loadedData: any[] }
+  ): Promise<any> {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.selectAll === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.selectAll(filePath, data);
+    } else {
+      console.error(
+        "SelectAll operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Updates data in a file using the specified schema, query, and update information.
+   *
+   * @param {string} dataname - The name of the data file to update data in.
+   * @param {object} data - The data to update, including query, schema, and loadedData.
+   * @param {any} data.query - The query to use for updating data.
+   * @param {SQLSchema} data.schema - The schema to use for updating data.
+   * @param {any[]} data.loadedData - The previously loaded data.
+   * @param {object} update - The update information.
+   * @param {operationKeys} update.updateQuery - The update query.
+   * @param {boolean} [update.upsert] - Optional flag indicating whether to upsert data.
+   * @returns {Promise<any>} - The result of the data update.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async updateData(
+    dataname: string,
+    data: { query: any; schema: SQLSchema; loadedData: any[] },
+    update: { updateQuery: operationKeys; upsert?: boolean }
+  ): Promise<any> {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.updateData === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.updateData(filePath, data, update);
+    } else {
+      console.error(
+        "UpdateData operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Performs a batch update on data in a file using the specified schema, query, and update information.
+   *
+   * @param {string} dataname - The name of the data file to update data in.
+   * @param {object} data - The data to update, including query, schema, and loadedData.
+   * @param {any} data.query - The query to use for updating data.
+   * @param {SQLSchema} data.schema - The schema to use for updating data.
+   * @param {any[]} data.loadedData - The previously loaded data.
+   * @param {object} update - The update information.
+   * @param {operationKeys} update.updateQuery - The update query.
+   * @returns {Promise<any>} - The result of the batch update.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async batchUpdate(
+    dataname: string,
+    data: { query: any; schema: SQLSchema; loadedData: any[] },
+    update: { updateQuery: operationKeys }
+  ): Promise<any> {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.batchUpdate === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.batchUpdate(filePath, data, update);
+    } else {
+      console.error(
+        "BatchUpdate operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Removes data from a file using the specified schema and query.
+   *
+   * @param {string} dataname - The name of the data file to remove data from.
+   * @param {object} data - The data to remove, including query, schema, and loadedData.
+   * @param {any} data.query - The query to use for removing data.
+   * @param {SQLSchema} data.schema - The schema to use for removing data.
+   * @param {any[]} data.loadedData - The previously loaded data.
+   * @returns {Promise<any>} - The result of the data removal.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async removeData(
+    dataname: string,
+    data: { query: any; schema: SQLSchema; loadedData: any[]; docCount: number }
+  ): Promise<any> {
+    if (!this.adapter) {
+      console.error(
+        "Database not connected. Please call connect method first."
+      );
+      throw new Error("Database not connected.");
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.removeData === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.removeData(filePath, data);
+    } else {
+      console.error(
+        "RemoveData operation is not supported by the current adapter."
+      );
+      throw new Error("Operation not supported.");
+    }
+  }
+
+  /**
+   * Performs a join operation on the specified collection filters.
+   *
+   * @param {JoinSQL[]} collectionFilters - An array of filters for joining collections.
+   * @returns {Promise<any>} - The result of the join operation.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async join(collectionFilters: JoinSQL[]): Promise<any> {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.join === "function"
+    ) {
+      return await this.adapter?.join(collectionFilters);
+    } else {
+      logError({
+        content: "Join operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Aggregates data from the specified file using the provided schema and pipeline.
+   *
+   * @param {string} dataname - The name of the data file to aggregate data from.
+   * @param {SQLSchema} schema - The schema to use for aggregation.
+   * @param {any[]} pipeline - The aggregation pipeline.
+   * @returns {Promise<any>} - The result of the aggregation.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async aggregateData(
+    dataname: string,
+    schema: SQLSchema,
+    pipeline: any[]
+  ): Promise<any> {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.aggregateData === "function"
+    ) {
+      return await this.adapter?.aggregateData(dataname, schema, pipeline);
+    } else {
+      logError({
         content:
-          "Add operation is not supported by the current adapter. Please switch to JSON or YAML adapter to use this operation.",
+          "AggregateData operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Counts the number of tables in the specified data file.
+   *
+   * @param {string} dataname - The name of the data file to count tables in.
+   * @returns {Promise<any>} - The result of the table count.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async countTables(dataname: string): Promise<any> {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.countTables === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.countTables(filePath);
+    } else {
+      logError({
+        content:
+          "CountTables operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Counts the number of documents in the specified data file and schema.
+   *
+   * @param {string} dataname - The name of the data file to count documents in.
+   * @param {SQLSchema} schema - The schema to use for counting documents.
+   * @returns {Promise<any>} - The result of the document count.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async docsCount(dataname: string, schema: SQLSchema): Promise<any> {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.docsCount === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.docsCount(filePath, schema);
+    } else {
+      logError({
+        content: "DocsCount operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Converts the specified data file to JSON format using the provided schema and optional table name.
+   *
+   * @param {string} dataname - The name of the data file to convert to JSON.
+   * @param {SQLSchema} schema - The schema to use for conversion.
+   * @param {string} [tableName] - Optional table name to include in the JSON conversion.
+   * @returns {Promise<any>} - The JSON representation of the data.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async toJSON(
+    dataname: string,
+    schema: SQLSchema,
+    tableName?: string
+  ): Promise<any> {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.toJSON === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.toJSON(filePath, schema, tableName);
+    } else {
+      logError({
+        content: "ToJSON operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Retrieves the names of tables in the specified data file.
+   *
+   * @param {string} dataname - The name of the data file to retrieve table names from.
+   * @returns {Promise<any>} - The names of the tables in the data file.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async tableNames(dataname: string): Promise<any> {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.tableNames === "function"
+    ) {
+      const filePath = path.join(this.dataPath, `${dataname}.${this.fileType}`);
+      return await this.adapter?.tableNames(filePath);
+    } else {
+      logError({
+        content:
+          "TableNames operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Migrates data from one table to another using the specified paths and options.
+   *
+   * @param {MigrationPath} migrationPath - The path for migration, including 'from' and 'to'.
+   * @param {TableOptions} tableOptions - Options for the migration, including 'fromTable', 'toTable', and 'query'.
+   * @param {string} migrationPath.from - The source path for migration.
+   * @param {string} migrationPath.to - The destination path for migration.
+   * @param {TableOptions} tableOptions.fromTable - The name of the source table.
+   * @param {TableOptions} tableOptions.toTable - The name of the destination table.
+   * @param {any} tableOptions.query - The query to use for migration.
+   * @returns {Promise<any>} - The result of the data migration.
+   * @throws {Error} - If the database is not connected or the operation is not supported.
+   */
+  async migrateData(
+    { from, to }: MigrationPath,
+    { fromTable, toTable, query }: TableOptions
+  ): Promise<any> {
+    if (!this.adapter) {
+      logError({
+        content: "Database not connected. Please call connect method first.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.migrateData === "function"
+    ) {
+      return await this.adapter?.migrateData(
+        { from, to },
+        { fromTable, toTable, query }
+      );
+    } else {
+      logError({
+        content:
+          "MigrateData operation is not supported by the current adapter.",
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+  }
+
+  /**
+   * Retrieves a set of database structure methods for a specified data name and schema.
+   *
+   * @param {string} dataname - The name of the data file or database.
+   * @param {SQLSchema} schema - The schema defining the structure of the data.
+   * @returns {StructureMethods | undefined} - Returns an object containing various methods for interacting with the database structure,
+   *                                           or `undefined` if the adapter is not suitable or missing.
+   *
+   * @throws {Error} Throws an error if the `dataname` or `schema` parameters are not provided.
+   *
+   * @example
+   * const methods = db.structure("myData", mySchema);
+   * methods?.loadData().then(data => console.log(data));
+   */
+  structure(dataname: string, schema: SQLSchema): StructureMethods | undefined {
+    if (!dataname || !schema) {
+      logError({
+        content:
+          'Please add a name for the data file ex:.. db.structure("dataname", schema)',
+        devLogs: this.devLogs,
+        throwErr: true,
+      });
+    }
+
+    if (
+      this.adapter instanceof sqlAdapter &&
+      typeof this.adapter?.loadData === "function"
+    ) {
+      return {
+        /**
+         * Load data from the database.
+         * @returns {Promise<any>} A Promise that resolves when the data is loaded.
+         */
+        loadData: async function (this: connect) {
+          return await this.loadData(dataname, schema);
+        }.bind(this),
+
+        /**
+         * Create a table in the database.
+         * @returns {Promise<any>} A Promise that resolves when the table is created.
+         */
+        createTable: async function (this: connect) {
+          return await this.createTable(dataname, schema);
+        }.bind(this),
+
+        /**
+         * Insert data into the database.
+         * @param {any[]} data - The data to be inserted.
+         * @returns {Promise<any>} A Promise that resolves when the data is inserted.
+         */
+        insertData: async function (this: connect, data: any[]) {
+          return await this.insertData(dataname, { dataArray: data, schema });
+        }.bind(this),
+
+        /**
+         * Select data from the database.
+         * @param {Object} params - The parameters for the selection.
+         * @param {any} params.query - The query to identify the data to be selected.
+         * @param {any[]} params.loadedData - The loaded data to be filtered.
+         * @returns {Promise<any>} A Promise that resolves with the selected data.
+         */
+        selectData: async function (
+          this: connect,
+          { query, loadedData }: { query: any; loadedData: any[] }
+        ) {
+          return await this.selectData(dataname, { query, schema, loadedData });
+        }.bind(this),
+
+        /**
+         * Select all data from the database.
+         * @param {Object} params - The parameters for the selection.
+         * @param {any} params.query - The query to identify the data to be selected.
+         * @param {any[]} params.loadedData - The loaded data to be filtered.
+         * @returns {Promise<any>} A Promise that resolves with all selected data.
+         */
+        selectAll: async function (
+          this: connect,
+          { query, loadedData }: { query: any; loadedData: any[] }
+        ) {
+          return await this.selectAll(dataname, { query, schema, loadedData });
+        }.bind(this),
+
+        /**
+         * Remove data from the database.
+         * @param {Object} params - The parameters for the removal.
+         * @param {any} params.query - The query to identify the data to be removed.
+         * @param {any[]} params.loadedData - The loaded data to be filtered.
+         * @param {number} params.docCount - Number of documents to remove.
+         * @returns {Promise<any>} A Promise that resolves when the data is removed.
+         */
+        removeData: async function (
+          this: connect,
+          {
+            query,
+            loadedData,
+            docCount,
+          }: { query: any; loadedData: any[]; docCount: number }
+        ) {
+          return await this.removeData(dataname, {
+            query,
+            schema,
+            docCount,
+            loadedData,
+          });
+        }.bind(this),
+
+        /**
+         * Update data in the database.
+         * @param {Object} params - The parameters for the update.
+         * @param {any} params.query - The query to identify the data to be updated.
+         * @param {any[]} params.loadedData - The loaded data to be filtered.
+         * @param {Object} updateParams - The parameters for the update query.
+         * @param {any} updateParams.updateQuery - The update query.
+         * @param {boolean} [updateParams.upsert] - Whether to perform an upsert operation.
+         * @returns {Promise<any>} A Promise that resolves when the data is updated.
+         */
+        updateData: async function (
+          this: connect,
+          { query, loadedData }: { query: any; loadedData: any[] },
+          { updateQuery, upsert }: { updateQuery: any; upsert?: boolean }
+        ) {
+          return await this.updateData(
+            dataname,
+            { query, schema, loadedData },
+            { updateQuery, upsert }
+          );
+        }.bind(this),
+
+        /**
+         * Batch update data in the database.
+         * @param {Object} params - The parameters for the batch update.
+         * @param {any} params.query - The query to identify the data to be updated.
+         * @param {any[]} params.loadedData - The loaded data to be filtered.
+         * @param {Object} updateParams - The parameters for the update query.
+         * @param {operationKeys} updateParams.updateQuery - The update query.
+         * @returns {Promise<any>} A Promise that resolves when the data is batch updated.
+         */
+        batchUpdate: async function (
+          this: connect,
+          { query, loadedData }: { query: any; loadedData: any[] },
+          { updateQuery }: { updateQuery: operationKeys }
+        ) {
+          return await this.batchUpdate(
+            dataname,
+            { query, schema, loadedData },
+            { updateQuery }
+          );
+        }.bind(this),
+
+        /**
+         * Count tables in the database.
+         * @returns {Promise<any>} A Promise that resolves with the count of tables.
+         */
+        countTables: async function (this: connect) {
+          return await this.countTables(dataname);
+        }.bind(this),
+
+        /**
+         * Count documents in the database.
+         * @returns {Promise<any>} A Promise that resolves with the count of documents.
+         */
+        docsCount: async function (this: connect) {
+          return await this.docsCount(dataname, schema);
+        }.bind(this),
+
+        /**
+         * Perform batch tasks in the database.
+         * @param {any[]} operations - Array of operations to perform.
+         * @returns {Promise<any>} A Promise that resolves when batch tasks are completed.
+         */
+        batchTasks: async function (this: connect, operations: any[]) {
+          return await this.batchTasks(operations);
+        }.bind(this),
+
+        /**
+         * Convert data to JSON.
+         * @param {string} [tableName] - The name of the table to convert.
+         * @returns {Promise<any>} A Promise that resolves with the JSON data.
+         */
+        toJSON: async function (this: connect, tableName?: string) {
+          return await this.toJSON(dataname, schema, tableName);
+        }.bind(this),
+
+        /**
+         * Perform a join operation in the database.
+         * @param {JoinSQL[]} collectionFilters - Filters to apply to the join operation.
+         * @returns {Promise<any>} A Promise that resolves with the join results.
+         */
+        join: async function (this: connect, collectionFilters: JoinSQL[]) {
+          return await this.join(collectionFilters);
+        }.bind(this),
+
+        /**
+         * Aggregate data in the database.
+         * @param {any[]} pipeline - The aggregation pipeline.
+         * @returns {Promise<any>} A Promise that resolves with the aggregated data.
+         */
+        aggregateData: async function (this: connect, pipeline: any[]) {
+          return await this.aggregateData(dataname, schema, pipeline);
+        }.bind(this),
+
+        /**
+         * Get the size of data in the database.
+         * @returns {Promise<any>} A Promise that resolves with the size of data.
+         */
+        dataSize: async function (this: connect) {
+          return await this.dataSize(dataname);
+        }.bind(this),
+
+        /**
+         * Get the size of data in the database.
+         * @returns {Promise<any>} A Promise that resolves with the size of data.
+         */
+        tableNames: async function (this: connect) {
+          return await this.tableNames(dataname);
+        }.bind(this),
+
+        /**
+         * Migrates data from one source to another.
+         * @param {Object} migrationPath - The migration path parameters.
+         * @param {string} migrationPath.from - The source path.
+         * @param {string} migrationPath.to - The destination path.
+         * @param {Object} tableOptions - The table options parameters.
+         * @param {string} tableOptions.fromTable - The source table.
+         * @param {string} tableOptions.toTable - The destination table.
+         * @param {Object} [tableOptions.query] - The query to filter data.
+         * @returns {Promise<AdapterResults>} The result of the migration.
+         */
+        migrateData: async function (
+          this: connect,
+          { from, to }: MigrationPath,
+          { fromTable, toTable, query }: TableOptions
+        ) {
+          return await this.migrateData(
+            { from, to },
+            { fromTable, toTable, query }
+          );
+        }.bind(this),
+
+        /**
+         * Watch for changes in the database.
+         * @returns {Promise<any>} A Promise that resolves with the changes in the database.
+         */
+        watch: async function (this: connect) {
+          return await this.watch(dataname, schema);
+        }.bind(this),
+      };
+    } else {
+      logError({
+        content: "The current adapter doesn't support this method.",
         devLogs: this.devLogs,
         throwErr: true,
       });

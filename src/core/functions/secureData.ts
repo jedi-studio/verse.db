@@ -180,18 +180,22 @@ export async function decodeJSON(
   }
 }
 
-
 export async function encodeYAML(data: any, key: string): Promise<Buffer> {
   try {
     const stringedData = yaml.stringify(data);
     const encryptedData = yamlEncrypt(stringedData, key);
     return Buffer.from(encryptedData);
   } catch (error: any) {
-    throw new Error(`Error occurred while encoding YAML data: ${error.message}`);
+    throw new Error(
+      `Error occurred while encoding YAML data: ${error.message}`
+    );
   }
 }
 
-export async function decodeYAML(filePath: string, key: string): Promise<any[] | null> {
+export async function decodeYAML(
+  filePath: string,
+  key: string
+): Promise<any[] | null> {
   try {
     const buffer = fs.readFileSync(filePath);
     const decryptedData = yamlDecrypt(buffer.toString(), key);
@@ -203,7 +207,7 @@ export async function decodeYAML(filePath: string, key: string): Promise<any[] |
 }
 
 function yamlEncrypt(data: string, key: string): string {
-  let encrypted = '';
+  let encrypted = "";
   for (let i = 0; i < data.length; i++) {
     const charCode = data.charCodeAt(i) ^ key.charCodeAt(i % key.length);
     encrypted += String.fromCharCode(charCode);
@@ -215,124 +219,117 @@ function yamlDecrypt(data: string, key: string): string {
   return yamlEncrypt(data, key);
 }
 
-export async function encodeSQL(data: string, key: string): Promise<string> {
-  let compressedEncodedData = "";
-  let count = 1;
-  for (let i = 0; i < data.length; i++) {
-      if (data[i] === data[i + 1]) {
-          count++;
-      } else {
-          if (count > 3) {
-              compressedEncodedData += `#${count}#${data[i]}`;
-          } else {
-              compressedEncodedData += data[i].repeat(count);
-          }
-          count = 1;
-      }
+export function encodeSQL(text: string, key: string) {
+  const keyLength = key.length;
+  let result = "";
+
+  for (let i = 0; i < text.length; i++) {
+    const charCode = text.charCodeAt(i);
+    const keyCharCode = key.charCodeAt(i % keyLength);
+
+    const encodedCharCode = (charCode + (keyCharCode % 0x10000)) % 0x10000;
+    result += String.fromCharCode(encodedCharCode);
   }
 
-  let encodedData = "";
-  for (let i = 0; i < compressedEncodedData.length; i++) {
-      const charCode = compressedEncodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-      encodedData += String.fromCharCode(charCode);
-  }
-
-  return encodedData;
+  return result;
 }
 
-export async function decodeSQL(encodedData: string, key: string): Promise<string> {
-  let decodedData = "";
-  for (let i = 0; i < encodedData.length; i++) {
-      const charCode = encodedData.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-      decodedData += String.fromCharCode(charCode);
+export function decodeSQL(encodedText: string, key: string) {
+  const keyLength = key.length;
+  let result = "";
+
+  for (let i = 0; i < encodedText.length; i++) {
+    const charCode = encodedText.charCodeAt(i);
+    const keyCharCode = key.charCodeAt(i % keyLength);
+
+    const decodedCharCode =
+      (charCode - (keyCharCode % 0x10000) + 0x10000) % 0x10000;
+    result += String.fromCharCode(decodedCharCode);
   }
 
-  let decompressedData = "";
-  let i = 0;
-  while (i < decodedData.length) {
-      if (decodedData[i] === '#') {
-          const countStartIndex = i + 1;
-          const countEndIndex = decodedData.indexOf('#', countStartIndex);
-          const count = parseInt(decodedData.substring(countStartIndex, countEndIndex));
-          const char = decodedData[countEndIndex + 1];
-          decompressedData += char.repeat(count);
-          i = countEndIndex + 2;
-      } else {
-          decompressedData += decodedData[i];
-          i++;
-      }
-  }
-
-  return decompressedData;
+  return result;
 }
 
-
-export async function neutralizer(folderPath: string, info: { dataType: "json" | "yaml" | "sql", secret: string }): Promise<string[]> {
-
+export async function neutralizer(
+  folderPath: string,
+  info: { dataType: "json" | "yaml" | "sql"; secret: string }
+): Promise<string[]> {
   const foundFiles: string[] = [];
 
-  if (!info || !info.dataType || !info.secret || !folderPath) throw new Error("Wrong usage: Please Make sure to provide folder path and info object parameter { dataType, secret }.");
+  if (!info || !info.dataType || !info.secret || !folderPath)
+    throw new Error(
+      "Wrong usage: Please Make sure to provide folder path and info object parameter { dataType, secret }."
+    );
 
   function searchFiles(currentPath: string): void {
-      const files = fs.readdirSync(currentPath);
-      files.forEach((file) => {
-          const filePath = path.join(currentPath, file);
-          const stats = fs.statSync(filePath);
-          if (stats.isDirectory()) {
-              searchFiles(filePath);
-          } else {
-              const fileExtension = path.extname(file);
-              if (fileExtension === '.verse') {
-                  foundFiles.push(filePath);
-              }
-          }
-      });
+    const files = fs.readdirSync(currentPath);
+    files.forEach((file) => {
+      const filePath = path.join(currentPath, file);
+      const stats = fs.statSync(filePath);
+      if (stats.isDirectory()) {
+        searchFiles(filePath);
+      } else {
+        const fileExtension = path.extname(file);
+        if (fileExtension === ".verse") {
+          foundFiles.push(filePath);
+        }
+      }
+    });
   }
 
   searchFiles(folderPath);
 
   for (let i = 0; i < foundFiles.length; i++) {
-      const filePath = foundFiles[i];
-      const fileExtension = path.extname(filePath);
-      const fileBaseName = path.basename(filePath, fileExtension);
+    const filePath = foundFiles[i];
+    const fileExtension = path.extname(filePath);
+    const fileBaseName = path.basename(filePath, fileExtension);
 
-      let decodedData: any;
-      let newData: any;
+    let decodedData: any;
+    let newData: any;
 
-      if (info.dataType === 'json') {
-          decodedData = await decodeJSON(filePath, info.secret);
-          newData = JSON.stringify(decodedData);
-      } else if (info.dataType === 'yaml') {
-          decodedData = await decodeYAML(filePath, info.secret);
-          newData = yaml.stringify(decodedData);
-      } else if (info.dataType === 'sql') {
-          const encodedData = await fs.promises.readFile(filePath, "utf-8");
-          decodedData = await decodeSQL(encodedData, info.secret);
-          newData = decodedData; 
-      }
+    if (info.dataType === "json") {
+      decodedData = await decodeJSON(filePath, info.secret);
+      newData = JSON.stringify(decodedData);
+    } else if (info.dataType === "yaml") {
+      decodedData = await decodeYAML(filePath, info.secret);
+      newData = yaml.stringify(decodedData);
+    } else if (info.dataType === "sql") {
+      const encodedData = await fs.promises.readFile(filePath, "utf-8");
+      decodedData = await decodeSQL(encodedData, info.secret);
+      newData = decodedData;
+    }
 
-      if (!decodedData || newData === null) throw new Error(`Failed to decode ${info.dataType} data.`);
-      
-      const newFilePath = path.join(path.dirname(filePath), fileBaseName);
-      
-      if (info.dataType === 'json') {
-          await fs.promises.writeFile(`${newFilePath}.json`, newData);
-      } else if (info.dataType === 'yaml') {
-          await fs.promises.writeFile(`${newFilePath}.yaml`, newData);
-      } else if (info.dataType === 'sql') {
-          await fs.promises.writeFile(`${newFilePath}.sql`, newData);
-      }
+    if (!decodedData || newData === null)
+      throw new Error(`Failed to decode ${info.dataType} data.`);
+
+    const newFilePath = path.join(path.dirname(filePath), fileBaseName);
+
+    if (info.dataType === "json") {
+      await fs.promises.writeFile(`${newFilePath}.json`, newData);
+    } else if (info.dataType === "yaml") {
+      await fs.promises.writeFile(`${newFilePath}.yaml`, newData);
+    } else if (info.dataType === "sql") {
+      await fs.promises.writeFile(`${newFilePath}.sql`, newData);
+    }
   }
 
   return foundFiles;
 }
 
-
 export function genObjectId(): string {
-  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0');
-  const machineId = 'abcdef'.split('').map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-  const processId = Math.floor(Math.random() * 65536).toString(16).padStart(4, '0');
-  const counter = Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
+  const timestamp = Math.floor(Date.now() / 1000)
+    .toString(16)
+    .padStart(8, "0");
+  const machineId = "abcdef"
+    .split("")
+    .map(() => Math.floor(Math.random() * 16).toString(16))
+    .join("");
+  const processId = Math.floor(Math.random() * 65536)
+    .toString(16)
+    .padStart(4, "0");
+  const counter = Math.floor(Math.random() * 16777216)
+    .toString(16)
+    .padStart(6, "0");
 
   return timestamp + machineId + processId + counter;
 }
