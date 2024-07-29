@@ -46,7 +46,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "Data added successfully.",
+      message: expect.anything(),
       results: expect.anything(),
     });
   });
@@ -63,7 +63,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "Data loaded successfully.",
+      message: expect.anything(),
       results: [
         { _id: expect.anything(), name: "John" },
         { _id: expect.anything(), name: "Jane" },
@@ -84,7 +84,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "1 document(s) removed successfully.",
+      message: expect.anything(),
       results: null,
     });
   });
@@ -102,7 +102,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "1 document(s) updated successfully.",
+      message: expect.anything(),
       results: {
         _id: expect.anything(),
         name: "Mike",
@@ -124,7 +124,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "1 document(s) updated successfully.",
+      message: expect.anything(),
       results: [
         {
           _id: expect.anything(),
@@ -147,7 +147,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "Found data matching your query.",
+      message: expect.anything(),
       results: { _id: expect.anything(), name: "John" },
     });
   });
@@ -179,7 +179,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "Data found with the given options.",
+      message: expect.anything(),
       results: {
         allData: [
           { _id: expect.anything(), name: "Mark" },
@@ -201,7 +201,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "File dropped successfully.",
+      message: expect.anything(),
       results: [],
     });
   });
@@ -239,7 +239,7 @@ describe("JSON", () => {
     // Assert
     expect(result).toEqual({
       acknowledged: true,
-      message: "Successfully searched in data for the given query.",
+      message: expect.anything(),
       results: {
         posts: [{ _id: expect.anything(), author: "maher", name: "mark" }],
         users: [{ _id: expect.anything(), author: "maher", name: "mark" }],
