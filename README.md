@@ -1,7 +1,7 @@
 ![Verse.db Logo](https://github.com/jedi-studio/verse.db/assets/100785809/269a554b-1157-4351-be16-f9c23c5ee1a2)
 
 Unlock the potential of your data with Verse.db, the premier data management tool that transcends the ordinary database experience. With unparalleled flexibility, security, and performance, Verse.db empowers you to wield your data with precision and ease.
-
+ 
 ### Elevate Your Data Experience
 
 - **Flexible**: Seamlessly manage various data formats including JSON, YAML, SQL, and more.
